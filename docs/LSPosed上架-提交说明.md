@@ -24,9 +24,9 @@
 
 ## 提交流程
 
-1. 把主项目推到 GitHub（`git init` → 首次提交 → push）
-   - `.gitignore` 已排除 `build/`、`*.apk`、`.version_state.txt`
-   - 是否提交 `release-v3.jks` 由你决定：公开仓库建议移出，改用 Secrets（见下）
+1. 把主项目推到 GitHub（已推：`liuxiansheng12369/chidao`）
+   - `.gitignore` 已排除 `build/`、`*.apk`、`*.jks`、`.version_state.txt`
+   - 签名密钥**不提交**：仓库里只放源码，jks 与口令配进仓库 Secrets（见下）
 2. 打第一个 Release：Actions → **Release APK** → Run workflow（或在本地 `assembleStandardRelease` 后手动上传 APK）
 3. 打开 `https://modules.lsposed.org`，点 **Submit Module**，用 GitHub 账号授权登录，填仓库地址提交
 4. 等审核（只查是否合规，不做代码审计），通过后模块页生成：`modules.lsposed.org/module/com.liuxiansheng.chidao`
