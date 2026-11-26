@@ -1,5 +1,5 @@
 /*
- * Lyricon V3 - Copyright (C) 2026 liuxiansheng
+ * 词岛 - Copyright (C) 2026 liuxiansheng
  * Licensed under GPL-3.0.
  */
 package com.liuxiansheng.lyricon.hyper.root

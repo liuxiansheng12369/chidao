@@ -1,5 +1,5 @@
 /*
- * Lyricon V3 · 超级岛内容模式框架（移植自老词幕 IslandContentBridge）
+ * 词岛 · 超级岛内容模式框架（移植自老词幕 IslandContentBridge）
  * ContentProviderConfig：内容 Provider 运行时配置快照，
  * 由 IslandSlotRuntimeConfig 转换而来，仅含 Provider 渲染所需字段。
  */

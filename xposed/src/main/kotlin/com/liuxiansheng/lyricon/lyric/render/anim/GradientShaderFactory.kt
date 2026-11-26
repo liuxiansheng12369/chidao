@@ -1,8 +1,8 @@
 /*
- * Lyricon V3 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
+ * 词岛 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
  * 包名：com.liuxiansheng.chidao
  * Copyright 2026 liuxiansheng（刘先生）
- * 本文件为 Lyricon V3 自研实现。
+ * 本文件为 词岛 自研实现。
  *
  * 渐变 Shader 工厂（V3 自研）。
  * 渐变主色保持 18% 宽度再渐入其余颜色，避免彩虹/多色退化成"色块拼接"。

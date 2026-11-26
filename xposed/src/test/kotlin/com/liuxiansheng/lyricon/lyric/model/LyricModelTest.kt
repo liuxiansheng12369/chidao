@@ -1,7 +1,7 @@
 /*
- * Lyricon V3 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
+ * 词岛 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
  * Copyright 2026 liuxiansheng（刘先生）
- * 本文件为 Lyricon V3 自研实现的单元测试。
+ * 本文件为 词岛 自研实现的单元测试。
  */
 
 package com.liuxiansheng.lyricon.hyper.lyric.model

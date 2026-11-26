@@ -1,8 +1,8 @@
 /*
- * Lyricon V3 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
+ * 词岛 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
  * 包名：com.liuxiansheng.chidao
  * Copyright 2026 liuxiansheng（刘先生）
- * 本文件为 Lyricon V3 自研实现。
+ * 本文件为 词岛 自研实现。
  *
  * IslandOuterGlowHooker — 超级岛外发光/超级光效
  * 按老词幕 2.9.78 稳定版（IslandOuterGlowHooker）逐行对照重新移植，仅融合两项适配：

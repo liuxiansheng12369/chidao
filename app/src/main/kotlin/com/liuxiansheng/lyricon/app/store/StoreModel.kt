@@ -1,8 +1,8 @@
 /*
- * Lyricon V3 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
+ * 词岛 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
  * 包名：com.liuxiansheng.chidao
  * Copyright 2026 liuxiansheng（刘先生）
- * 本文件为 Lyricon V3 自研实现。
+ * 本文件为 词岛 自研实现。
  *
  * StoreModel：歌词源商店的数据模型。
  * 类型（kind）、可用性、安装状态、操作状态机全部显式建模，
@@ -54,7 +54,7 @@ enum class StoreSource(
         credit = "ColorOS 歌词源官方目录",
     ),
     TOMAKINO(
-        sectionTitle = "词幕歌词源",
+        sectionTitle = "词岛兼容源",
         author = "Tomakino",
         authorUrl = "https://github.com/tomakino",
         credit = "汽水、酷狗、酷我、QQ、网易云、Apple 等 21 个源",

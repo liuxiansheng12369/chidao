@@ -1,8 +1,8 @@
 /*
- * Lyricon V3 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
+ * 词岛 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
  * 包名：com.liuxiansheng.chidao
  * Copyright 2026 liuxiansheng（刘先生）
- * 本文件为 Lyricon V3 自研实现。
+ * 本文件为 词岛 自研实现。
  *
  * MainActivity：首页（按老词幕 HomeTab 样式：状态卡 / 总开关卡 / 快捷入口 / 系统信息）。
  * 状态卡显示模块激活状态 + HyperOS 版本 + 模块版本；

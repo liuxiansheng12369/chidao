@@ -1,5 +1,5 @@
 /*
- * Lyricon V3 · 超级岛内容模式框架（移植自老词幕 IslandContentBridge）
+ * 词岛 · 超级岛内容模式框架（移植自老词幕 IslandContentBridge）
  * IslandContentProviderManager：Provider 视图生命周期管理。
  * - 按（容器视图 → 侧）持有 Provider 绑定，视图被系统回收时绑定自动失效
  * - 模式切换时销毁旧 Provider、创建新 Provider

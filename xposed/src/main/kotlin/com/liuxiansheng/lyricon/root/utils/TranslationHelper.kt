@@ -1,8 +1,8 @@
 /*
- * Lyricon V3 · 翻译显示策略
+ * 词岛 · 翻译显示策略
  * 包名：com.liuxiansheng.chidao
  * Copyright 2026 liuxiansheng（刘先生）
- * 本文件为 Lyricon V3 自研实现。
+ * 本文件为 词岛 自研实现。
  */
 
 package com.liuxiansheng.lyricon.hyper.root.utils

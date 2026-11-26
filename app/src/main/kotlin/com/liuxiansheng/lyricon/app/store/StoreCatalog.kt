@@ -1,8 +1,8 @@
 /*
- * Lyricon V3 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
+ * 词岛 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
  * 包名：com.liuxiansheng.chidao
  * Copyright 2026 liuxiansheng（刘先生）
- * 本文件为 Lyricon V3 自研实现。
+ * 本文件为 词岛 自研实现。
  *
  * StoreCatalog：目录信封的验签、逐字段校验、持久化与镜像下载。
  * 规则与上游 ColorOS-Live-Lyrics-Bridge 的 CatalogVerifier 对齐：
@@ -425,7 +425,7 @@ object CatalogHttp {
             readTimeout = 20000
             requestMethod = "GET"
             instanceFollowRedirects = true
-            setRequestProperty("User-Agent", "LyriconV3-Store")
+            setRequestProperty("User-Agent", "Chidao-Store")
             setRequestProperty("Accept", "application/json")
         }
         try {

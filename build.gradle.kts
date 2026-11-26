@@ -12,18 +12,17 @@ plugins {
 // 正式版：1.1.0 →（下一次打正式版）1.2.0 → 1.3.0 …
 // 测试版：跟在当前正式版号后面加一位小数 —— 正式版 1.1.0 之后是 1.1.1、1.1.2 …
 //         正式版升到 1.2.0 后，测试版从 1.2.1 重新开始
-// 两条规则共用一个小数计数：只在真正发起打包时 +1，打完就停，不自动加。
-// 构建失败 / 被打断：下次启动按 .version_state.txt 把号退回去，不白涨。
+// 两条规则共用一个小数计数：只在构建成功后 +1，配置阶段只计算、不改文件。
+// 这样一次构建里配置被跑几遍，算出来的号都一样；不再需要回退点文件。
 val selfVersionFile = rootProject.file("build.gradle.kts")
-val versionStateFile = rootProject.file(".version_state.txt")
 val versionCodeRe = """extra\["appVersionCode"\] = (\d+)""".toRegex()
 val releaseNameRe = """extra\["appReleaseVersionName"\] = "(\d+)\.(\d+)\.(\d+)"""".toRegex()
 val testPatchRe = """extra\["appTestPatch"\] = (\d+)""".toRegex()
 
 // ↓ 下面是版本号存档（打包脚本自己改写它们），不是本次构建生效值，别手改
-extra["appVersionCode"] = 2869
+extra["appVersionCode"] = 2870
 extra["appReleaseVersionName"] = "2.4.0"
-extra["appTestPatch"] = 0
+extra["appTestPatch"] = 1
 
 fun writeVersionToFile(code: Int, release: String, testPatch: Int) {
     var t = selfVersionFile.readText()
@@ -38,18 +37,6 @@ run {
     var code = versionCodeRe.find(text)!!.groupValues[1].toInt()
     var rel = releaseNameRe.find(text)!!.groupValues.let { "${it[1]}.${it[2]}.${it[3]}" }
     var patch = testPatchRe.find(text)!!.groupValues[1].toInt()
-
-    if (versionStateFile.exists()) {
-        val prev = versionStateFile.readLines()
-        if (prev.size >= 3) {
-            code = prev[0].toInt()
-            rel = prev[1]
-            patch = prev[2].toInt()
-            writeVersionToFile(code, rel, patch)
-            println("上次构建未成功，版本号已回退到 正式=${rel} / 测试补位=${patch} (code ${code})")
-        }
-        versionStateFile.delete()
-    }
 
     val names = gradle.startParameter.taskNames
     val isRelease = names.any { it.endsWith("Release") }
@@ -78,12 +65,11 @@ run {
     }
 
     if (isRelease || isTest) {
-        val oldCode = code
-        val oldRel = releaseNameRe.find(selfVersionFile.readText())!!.groupValues.let { "${it[1]}.${it[2]}.${it[3]}" }
-        val oldPatch = testPatchRe.find(selfVersionFile.readText())!!.groupValues[1]
+        // 只计算本次要用的号，不写回文件；等构建成功由 commitVersion* 任务统一提交
         code += 1
-        writeVersionToFile(code, rel, patch)
-        versionStateFile.writeText("$oldCode\n$oldRel\n$oldPatch\n")
+        extra["pendingVersionCode"] = code
+        extra["pendingReleaseName"] = rel
+        extra["pendingTestPatch"] = patch
         println("本次打包版本: $buildName (code $code)  [${if (isTest) "测试版" else "正式版"}]")
     }
 
@@ -179,25 +165,33 @@ subprojects {
     }
 }
 
-// ============ 版本号策略：逻辑在文件顶部（只在打包时 +1，打完不再自动加） ============
-// 构建成功 → 删掉 .version_state.txt（号段值就是本次打出去的版本）
+// ============ 版本号策略 ============
+// 配置阶段只计算本次要用的号（幂等：配置跑几遍都是同一个号）；
+// 构建成功后才由 commitVersion* 把号写回 build.gradle.kts。
+// 构建失败/中断 → 文件没被改，天然不涨，不需要回退点。
 
-/** 构建结束：成功才提交版本号（删除回滚点），失败保留给下次回滚。 */
+/** 构建结束：成功才提交版本号。 */
 fun commitVersionIfSuccess(assembleSuffix: String, label: String) {
     // 必须收集**全部**匹配的 assemble 任务：
     // 每个子项目的 tasks 里可能同时存在 assembleDebug 与 assembleStandardDebug，
-    // 原来用 firstOrNull 只取到第一个，常常取到没跑的那个，导致 anyExecuted 永远为 false，
-    // 于是每次都误报"构建未成功"，版本号被回滚点卡住、永远不涨。
+    // 原来用 firstOrNull 只取到第一个，常常取到没跑的那个，导致 anyExecuted 永远为 false。
     val assembles = rootProject.allprojects.flatMap { p ->
         p.tasks.toList().filter { it.name.startsWith("assemble") && it.name.endsWith(assembleSuffix) }
     }
     val anyFailure = assembles.any { it.state.failure != null }
     val anyExecuted = assembles.any { it.state.executed }
     if (!anyFailure && anyExecuted) {
-        if (versionStateFile.exists()) versionStateFile.delete()
-        println("$label 构建成功，版本号已提交")
+        val pendingCode = rootProject.extra["pendingVersionCode"] as? Int
+        val pendingRel = rootProject.extra["pendingReleaseName"] as? String
+        val pendingPatch = rootProject.extra["pendingTestPatch"] as? Int
+        if (pendingCode != null && pendingRel != null && pendingPatch != null) {
+            writeVersionToFile(pendingCode, pendingRel, pendingPatch)
+            println("$label 构建成功，版本号已提交: $pendingRel / 补位 $pendingPatch / code $pendingCode")
+        } else {
+            println("$label 构建成功，本次没有版本号变更")
+        }
     } else {
-        println("$label 构建未成功，版本号将在下次构建前自动回滚")
+        println("$label 构建未成功，版本号未改动（下次构建不会跳号）")
     }
 }
 

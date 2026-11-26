@@ -1,8 +1,8 @@
 /*
- * Lyricon V3 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
+ * 词岛 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
  * 包名：com.liuxiansheng.chidao
  * Copyright 2026 liuxiansheng（刘先生）
- * 本文件为 Lyricon V3 自研实现。
+ * 本文件为 词岛 自研实现。
  *
  * LyricSourceScanner：扫描系统内歌词 provider 插件。
  * - 识别：非系统应用且 metaData 声明 lyricon_module=true（兼容 ColorOS 实时歌词桥接前缀包）
@@ -437,8 +437,8 @@ object LyricSourceScanner {
      */
     private val DESCRIPTION_ZH = mapOf(
         "io.github.andrealtb.coloroslyrics.provider.kuwo" to "为酷我音乐提供 ColorOS 锁屏歌词",
-        "io.github.proify.lyricon.qishuiprovider" to "为词幕与 ColorOS 实时歌词桥接提供汽水音乐歌词",
-        "com.leguandev.sollin.v2" to "为词幕悬浮歌词提供歌词的 Sollin 歌词源",
+        "io.github.proify.lyricon.qishuiprovider" to "汽水音乐歌词源，词岛可直接读取",
+        "com.leguandev.sollin.v2" to "Sollin 播放器歌词源，词岛可直接读取",
     )
 
     /** 命中中文对照就用中文，否则保留 provider 自带描述。 */

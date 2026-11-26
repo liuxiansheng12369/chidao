@@ -1,9 +1,9 @@
 /*
- * Lyricon V3 · 超级岛歌词（小米澎湃 OS / HyperOS）
+ * 词岛 · 超级岛歌词（小米澎湃 OS / HyperOS）
  * 包名：com.liuxiansheng.chidao
  * 模块：打轴器 :axis · 逐字打轴
  * Copyright 2026 liuxiansheng（刘先生）· 保留所有权利
- * 本文件为 Lyricon V3 自研实现，未经授权禁止复制、修改、分发。
+ * 本文件为 词岛 自研实现，未经授权禁止复制、修改、分发。
  */
 
 package com.liuxiansheng.lyricon.axis.core
@@ -385,7 +385,7 @@ object LrcWriter {
         // 标准元信息标签：播放器认，也会当成歌名歌手显示。必须先清洗，否则 ] 会把标签截断
         sb.append("[ti:").append(tagSafe(axis.title)).append("]\n")
         sb.append("[ar:").append(tagSafe(axis.artist)).append("]\n")
-        sb.append("[by:").append(tagSafe("词岛 Lyricon V3 · 打轴器")).append("]\n")
+        sb.append("[by:").append(tagSafe("词岛 · 打轴器")).append("]\n")
         if (axis.durationMs > 0L) {
             sb.append("[length:").append(lengthValue(axis.durationMs)).append("]\n")
         }
@@ -410,7 +410,7 @@ object LrcWriter {
         if (withMeta) {
             sb.append("[ti:").append(axis.title).append("]\n")
             sb.append("[ar:").append(axis.artist).append("]\n")
-            sb.append("[by:词岛 Lyricon V3 · 打轴器]\n")
+            sb.append("[by:词岛 · 打轴器]\n")
             if (axis.durationMs > 0L) {
                 sb.append("[length:").append(lengthValue(axis.durationMs)).append("]\n")
             }

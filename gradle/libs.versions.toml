@@ -28,9 +28,6 @@ kotlinxSerializationJson = "1.11.0"
 # SVG（老词幕 common 的 SVGHelper 依赖，状态栏域 provider logo 用）
 androidsvg = "1.4"
 
-# SuperLyric API（第三方歌词源协议，Sollin 等播放器以 superlyricapi 声明推送）
-superlyricapi = "3.6"
-
 # Xposed
 xposed-api = "102.0.0"
 xposed-service = "102.0.0"
@@ -64,8 +61,6 @@ coui-material3 = { module = "io.github.itoseo:coui-material3", version.ref = "co
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 
 androidsvg = { module = "com.caverock:androidsvg-aar", version.ref = "androidsvg" }
-
-superlyricapi = { group = "com.github.HChenX", name = "SuperLyricApi", version.ref = "superlyricapi" }
 
 libxposed-api = { group = "io.github.libxposed", name = "api", version.ref = "xposed-api" }
 libxposed-service = { group = "io.github.libxposed", name = "service", version.ref = "xposed-service" }

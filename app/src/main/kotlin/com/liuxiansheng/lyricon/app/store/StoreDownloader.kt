@@ -1,8 +1,8 @@
 /*
- * Lyricon V3 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
+ * 词岛 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
  * 包名：com.liuxiansheng.chidao
  * Copyright 2026 liuxiansheng（刘先生）
- * 本文件为 Lyricon V3 自研实现。
+ * 本文件为 词岛 自研实现。
  *
  * StoreDownloader：把目录里的 APK 拉进私有缓存。
  * 先写 .part，体积和 SHA-256 都对上才改名成正式文件 —— 半截文件、别人换过的文件
@@ -134,7 +134,7 @@ object StoreDownloader {
             readTimeout = 30000
             requestMethod = "GET"
             instanceFollowRedirects = true
-            setRequestProperty("User-Agent", "LyriconV3-Store")
+            setRequestProperty("User-Agent", "Chidao-Store")
         }
         try {
             if (conn.responseCode != 200) throw IOException("HTTP ${conn.responseCode}")

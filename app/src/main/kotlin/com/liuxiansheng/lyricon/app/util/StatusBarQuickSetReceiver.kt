@@ -1,5 +1,5 @@
 /*
- * Lyricon V3 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
+ * 词岛 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
  * Copyright 2026 liuxiansheng（刘先生）
  *
  * 状态栏歌词面板的「快速设置」接收端。

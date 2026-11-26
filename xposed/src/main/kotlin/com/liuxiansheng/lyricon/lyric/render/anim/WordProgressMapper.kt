@@ -3,7 +3,7 @@
  * 源码文件头另标 Copyright 2026 Proify, Tomakino（其分叉自 Lyricon 时未改头，以仓库 LICENSE 为准）。
  * 原版权归原作者所有。
  *
- * 本文件由 Lyricon V3 重写实现（结构重做），对外行为与原实现等价。
+ * 本文件由 词岛 重写实现（结构重做），对外行为与原实现等价。
  * Copyright 2026 liuxiansheng（刘先生）
  * 随词岛整体以 GPL-3.0 发布。
  */

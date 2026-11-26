@@ -1,5 +1,5 @@
 /*
- * 本文件由 Lyricon V3 新增。
+ * 本文件由 词岛 新增。
  * Copyright 2026 liuxiansheng（刘先生）
  * 随词岛整体以 GPL-3.0 发布。
  */

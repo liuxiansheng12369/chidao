@@ -13,7 +13,7 @@ class LyriconApp : Application() {
         super.onCreate()
         // 崩溃落盘：写到 files/crash/，事后 adb 直接取，不依赖 logcat
         runCatching { com.liuxiansheng.lyricon.app.util.CrashLogger.install(this) }
-        Log.i(TAG, "Lyricon v3 Application created")
+        Log.i(TAG, "Chidao Application created")
 
         // 商店目录预热：开进程就把本地目录读进内存，点开"歌词源商店"直接铺列表，不出现"读取目录"
         runCatching {

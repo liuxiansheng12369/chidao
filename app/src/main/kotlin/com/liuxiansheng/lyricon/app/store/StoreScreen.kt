@@ -1,8 +1,8 @@
 /*
- * Lyricon V3 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
+ * 词岛 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
  * 包名：com.liuxiansheng.chidao
  * Copyright 2026 liuxiansheng（刘先生）
- * 本文件为 Lyricon V3 自研实现。
+ * 本文件为 词岛 自研实现。
  *
  * StoreScreen：歌词源商店独立页面。
  * 按类型分组（专属播放器 / 通用播放器 / 动态封面），每张卡显示安装态、
@@ -147,7 +147,7 @@ private fun CreditCard() {
                     modifier = Modifier.padding(top = 6.dp),
                 )
             }
-            CreditAuthorRow("Tomakino", StoreSource.TOMAKINO.authorUrl, "词幕的作者")
+            CreditAuthorRow("Tomakino", StoreSource.TOMAKINO.authorUrl, "歌词源作者")
             CreditAuthorRow("Andrea-lyz", StoreSource.ANDREA.authorUrl, "ColorOS 源的作者")
         }
     }

@@ -1,8 +1,8 @@
 /*
- * Lyricon V3 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
+ * 词岛 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
  * 包名：com.liuxiansheng.chidao
  * Copyright 2026 liuxiansheng（刘先生）
- * 本文件为 Lyricon V3 自研实现。
+ * 本文件为 词岛 自研实现。
  */
 
 package com.liuxiansheng.lyricon.app.live
@@ -122,7 +122,7 @@ object ListenPoster {
             readTimeout = 12000
             requestMethod = "GET"
             instanceFollowRedirects = true
-            setRequestProperty("User-Agent", "LyriconV3")
+            setRequestProperty("User-Agent", "Chidao")
         }
         val ok = conn.inputStream.use { input ->
             val tmp = File(dst.parentFile, dst.name + ".tmp")
@@ -353,12 +353,12 @@ object ListenPoster {
         else stats.topSources.take(3).joinToString("  ·  ") { it.first }
         canvas.drawText(sources, PAD, 1274f, paint)
 
-        // 11 底部：左日期，右 词岛 V3
+        // 11 底部：左日期，右 词岛
         paint.textSize = 26f
         paint.color = sub
         val day = SimpleDateFormat("M月d日 EEEE", Locale.CHINA).format(Date())
         canvas.drawText(day, PAD, H - PAD, paint)
-        val sign = "词岛 V3"
+        val sign = "词岛"
         canvas.drawText(sign, right - paint.measureText(sign), H - PAD, paint)
     }
 

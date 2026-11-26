@@ -2,7 +2,7 @@
  * 原实现来源：lyricon-master（作者 Proify, Tomakino），Apache License 2.0
  * 原版权归原作者所有。
  *
- * 本文件由 Lyricon V3 重写实现（结构重做），对外行为与原实现等价。
+ * 本文件由 词岛 重写实现（结构重做），对外行为与原实现等价。
  * Copyright 2026 liuxiansheng（刘先生）
  * 随词岛整体以 GPL-3.0 发布。
  */
@@ -23,7 +23,7 @@ import com.liuxiansheng.lyricon.hyper.root.PrefHotReload
 import io.github.libxposed.api.XposedModuleInterface
 
 /**
- * Lyricon V3 模块入口。
+ * 词岛模块入口。
  *
  * SystemUI 进程：全部走 HyperLyric 管线（HookEntry 的 hook 注册 + SourceManager 歌词源
  * + BaseIslandRenderer 渲染）——超级岛显示（歌名/歌词/元数据）与 HyperLyric 一字不差。
@@ -38,7 +38,7 @@ class ModuleEntry : HookEntry() {
         if (BuildConfig.DEBUG) {
             YLog.debugEnabled = true
             YLog.infoEnabled = true
-            DiagnosticsLog.i(TAG, "Lyricon v3 ModuleEntry loaded: process=${param.processName}, debug=true")
+            DiagnosticsLog.i(TAG, "Chidao ModuleEntry loaded: process=${param.processName}, debug=true")
         }
         super.onModuleLoaded(param)
     }
