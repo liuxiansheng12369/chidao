@@ -50,7 +50,7 @@ HyperOS 上的超级岛歌词 + 状态栏歌词模块。基于 LSPosed（libxpos
 
 - 正式版：`2.2.0` → 下一次正式打包 `2.3.0`
 - 测试版：正式版号 + 一位小数，`2.3.0` → `2.3.1`、`2.3.2`……
-- `versionCode` 每次打包 +1，构建失败会按 `.version_state.txt` 回退
+- `versionCode` 每次打包 +1；号只在构建成功后写回文件，配置阶段和失败构建都不会涨号
 
 ## 构建
 
@@ -77,7 +77,9 @@ RELEASE_KEY_ALIAS=liuxiansheng
 RELEASE_KEY_PASSWORD=***
 ```
 
-CI 构建从仓库 Secrets 读取：`RELEASE_JKS_BASE64`（jks 的 base64）、`RELEASE_STORE_FILE`、`RELEASE_STORE_PASSWORD`、`RELEASE_KEY_ALIAS`、`RELEASE_KEY_PASSWORD`。缺任一项会直接报「缺少签名参数」，不会静默用默认密钥。
+CI 构建从仓库 Secrets 读取：`RELEASE_JKS_BASE64`（jks 的 base64）、`RELEASE_STORE_FILE`、`RELEASE_STORE_PASSWORD`、`RELEASE_KEY_ALIAS`、`RELEASE_KEY_PASSWORD`。
+
+四个参数齐备且密钥文件在位时才用这份签名；缺参数时回退到系统默认 debug 签名——所以别人 clone 下来也能编出可安装的包，但签名不是作者的，覆盖不了官方发布版。
 
 ## 目录结构
 
