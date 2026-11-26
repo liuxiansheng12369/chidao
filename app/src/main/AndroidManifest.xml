@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission
+        android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="PackageVisibilityPolicy" />
+    <!-- 超级岛环绕频谱：读取系统音频输出做律动（仅本机实时波形，不录制、不落盘） -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 歌词源商店：下载并交给系统安装器 -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!--
+      包可见性兜底：某些机型（真我 / ColorOS）即使声明了 QUERY_ALL_PACKAGES，
+      getInstalledPackages 仍可能被收紧，导致"歌词源"页看不见已安装的 provider。
+      这里按包名逐个声明，保证这些已知歌词源一定可见，"点对点探活"也靠它。
+    -->
+    <queries>
+        <package android:name="liuxiansheng.lyricon.provider" />
+        <package android:name="io.github.proify.lyricon.core" />
+        <package android:name="io.github.proify.lyricon.qishuiprovider" />
+        <package android:name="io.github.andrealtb.coloroslyrics.provider.qishui" />
+        <package android:name="io.github.andrealtb.coloroslyrics.provider.kugou" />
+        <package android:name="io.github.andrealtb.coloroslyrics.provider.kuwo" />
+        <package android:name="io.github.andrealtb.coloroslyrics.provider.qq" />
+        <package android:name="io.github.andrealtb.coloroslyrics.provider.netease" />
+        <package android:name="io.github.andrealtb.coloroslyrics.provider.apple" />
+        <package android:name="io.github.andrealtb.coloroslyrics.provider.lx" />
+        <package android:name="io.github.andrealtb.coloroslyrics.provider.spotify" />
+        <package android:name="io.github.andrealtb.coloroslyrics.provider.poweramp" />
+        <package android:name="io.github.andrealtb.coloroslyrics.provider.salt" />
+        <package android:name="io.github.andrealtb.coloroslyrics.provider.readify" />
+        <package android:name="io.github.andrealtb.coloroslyrics.provider.cone" />
+        <package android:name="io.github.andrealtb.coloroslyrics.provider.metrolist" />
+    </queries>
+
+    <application
+        android:name=".LyriconApp"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:description="@string/app_description"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.DayNight"
+        tools:overrideLibrary="top.yukonga.miuix.kmp.blur">
+
+        <meta-data
+            android:name="xposedmodule"
+            android:value="true" />
+        <meta-data
+            android:name="xposedscope"
+            android:resource="@array/module_scope" />
+
+        <activity
+            android:name=".activity.MainActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:configChanges="orientation|screenSize|keyboardHidden">
+            <!-- LSPosed 点模块"打开"按钮 → 主页（MAIN+INFO 是 Xposed 模块约定入口） -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.INFO" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".activity.SettingsActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <!-- 超级岛环绕律动预览（真实音频驱动，调试用） -->
+        <activity
+            android:name=".activity.SpectrumPreviewActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <activity-alias
+            android:name=".activity.LauncherAlias"
+            android:enabled="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:targetActivity=".activity.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <provider
+            android:name=".live.LiveStateProvider"
+            android:authorities="com.liuxiansheng.chidao.live-state"
+            android:exported="true"
+            android:enabled="true" />
+
+        <!-- 歌词源商店：PackageInstaller 会话的安装回执（只有系统安装器能进来） -->
+        <receiver
+            android:name=".store.StoreInstallReceiver"
+            android:exported="false" />
+
+        <!-- 打轴器直接读系统媒体会话（歌名/歌手/时长/实时进度）所需的资格，本身不处理任何通知 -->
+        <service
+            android:name=".live.AxisNotifListener"
+            android:label="词岛打轴"
+            android:exported="false"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!-- 状态栏手里没有轴副本时喊一声，这里重推整库。平时不触发，也不会常驻。 -->
+        <receiver
+            android:name=".AxisSyncRequestReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.liuxiansheng.lyricon.action.AXIS_SYNC_REQUEST" />
+            </intent-filter>
+        </receiver>
+
+        <!-- 状态栏歌词面板（SystemUI 进程）上的快速设置：钉住包名定向广播过来，由本接收器写 prefs -->
+        <receiver
+            android:name=".util.StatusBarQuickSetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.liuxiansheng.chidao.STATUS_BAR_QUICK_SET" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+
+</manifest>

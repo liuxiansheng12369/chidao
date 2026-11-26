@@ -1,0 +1,55 @@
+name: 问题反馈
+description: 不生效、崩溃、歌词异常
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: input
+    id: device
+    attributes:
+      label: 设备与系统
+      description: 机型 + 系统版本，例如 小米 14 / HyperOS 3（Android 16）
+    validations:
+      required: true
+
+  - type: input
+    id: framework
+    attributes:
+      label: 框架版本
+      description: LSPosed 或 Vector 的版本号（管理器「关于」里可以看到）
+    validations:
+      required: true
+
+  - type: input
+    id: appversion
+    attributes:
+      label: 词岛版本
+      description: App 首页底部显示的版本号，例如 2.2.47
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 现象与复现步骤
+      description: 做了什么、期望是什么、实际是什么。涉及超级岛还是状态栏歌词请写清
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志
+      description: |
+        抓 Lyricon 标签的日志：
+        `adb logcat -s Lyricon:V`（或过滤 `Lyricon`）
+        复现问题后贴关键片段，崩溃请附 `adb logcat -b crash`
+      render: shell
+
+  - type: checkboxes
+    id: precheck
+    attributes:
+      label: 已自查
+      options:
+        - label: 装完模块后重启过一次系统界面
+        - label: 已在 LSPosed / Vector 里启用模块
+        - label: 用的是本仓库 Release 里的 APK（不是旧版本残留）

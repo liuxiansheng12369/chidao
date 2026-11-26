@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 网上搜词要联网（主工程 App 已声明，这里再声明一次，将来单独拆出去也能自己用） -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- 打轴器入口：不单独出图标，只是词岛首页里能点进来的一个页面。
+         exported=false，只有同一个应用的首页能启动它。 -->
+    <application>
+        <activity
+            android:name=".entry.AxisEntryActivity"
+            android:exported="false"
+            android:label="歌词打轴"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar"
+            android:windowSoftInputMode="adjustResize" />
+    </application>
+
+</manifest>

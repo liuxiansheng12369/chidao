@@ -1,0 +1,2263 @@
+/*
+ * Lyricon V3 · 超级岛歌词（小米澎湃 OS / HyperOS）
+ * 包名：com.liuxiansheng.lyricon.v3
+ * 模块：打轴器 :axis · 逐字打轴
+ * Copyright 2026 liuxiansheng（刘先生）· 保留所有权利
+ * 本文件为 Lyricon V3 自研实现，未经授权禁止复制、修改、分发。
+ */
+
+package com.liuxiansheng.lyricon.axis.ui
+
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.Intent
+import android.net.Uri
+import android.os.SystemClock
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.Checkbox
+import androidx.compose.material.OutlinedTextField
+import androidx.compose.material.Slider
+import androidx.compose.material.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.liuxiansheng.lyricon.axis.api.ManualAxisApi
+import com.liuxiansheng.lyricon.axis.core.AxisExporter
+import com.liuxiansheng.lyricon.axis.core.AxisIndexEntry
+import com.liuxiansheng.lyricon.axis.core.AxisIssue
+import com.liuxiansheng.lyricon.axis.core.AxisStore
+import com.liuxiansheng.lyricon.axis.core.ImportedLyric
+import com.liuxiansheng.lyricon.axis.core.LocalLyricImport
+import com.liuxiansheng.lyricon.axis.core.AxisTokenizer
+import com.liuxiansheng.lyricon.axis.core.AxisValidator
+import com.liuxiansheng.lyricon.axis.core.ImportReport
+import com.liuxiansheng.lyricon.axis.core.LrcWriter
+import com.liuxiansheng.lyricon.axis.core.LyricDoc
+import com.liuxiansheng.lyricon.axis.core.LyricSearch
+import com.liuxiansheng.lyricon.axis.core.ManualAxis
+import com.liuxiansheng.lyricon.axis.core.Precision
+import com.liuxiansheng.lyricon.axis.core.SongKey
+import com.liuxiansheng.lyricon.axis.core.WebSong
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import kotlin.math.abs
+
+enum class Route { Home, Search, Paste, Review, Tap, Proofread, Save, Transfer }
+
+/** 敲轴两种档位：逐字敲（一个字一下）/ 快敲（一句一下，字由系统均分）。 */
+enum class TapMode { CHAR, LINE }
+
+class DraftLine(text: String) {
+    var text: String by mutableStateOf(text)
+    var keep by mutableStateOf(true)
+}
+
+/** 播放器实时状态：位置毫秒 + 是否真在播。没有播放会话时由调用方返回 null。 */
+data class LiveState(val positionMs: Long, val playing: Boolean)
+
+data class Candidate(
+    val title: String,
+    val artist: String,
+    val album: String,
+    val durationMs: Long,
+    val lines: List<String>,
+    val hasTiming: Boolean,
+    val web: WebSong? = null,
+) {
+    fun durationLabel(): String = mmss(durationMs)
+    /** 差 2 秒以内才算同一首（整秒比），防止串轴。 */
+    fun matches(targetMs: Long): Boolean = targetMs > 0L && abs(durationMs - targetMs) <= 2000L
+}
+
+class AxisState(
+    initialTitle: String = "",
+    initialArtist: String = "",
+    initialDurationMs: Long = 0L,
+    private val startAtSearch: Boolean = false,
+) {
+
+    var route by mutableStateOf(if (startAtSearch) Route.Search else Route.Home)
+    /** 核对页返回到哪：从搜词来就回搜词，从首页粘贴 / 本地文件来就回首页。 */
+    private var reviewFrom by mutableStateOf(Route.Search)
+    var title by mutableStateOf(initialTitle)
+    var artist by mutableStateOf(initialArtist)
+    var keyword by mutableStateOf(initialTitle)
+    var durationMs by mutableStateOf(initialDurationMs)
+    /** 打点时不再统一扣提前量（0）；整体误差交给「调值」处理。 */
+    var leadMs by mutableStateOf(0)
+    /** 整轴调值：只在播放时平移，记录不动。负=提前，正=延后。 */
+    var offsetMs by mutableStateOf(0)
+    var sourceLabel by mutableStateOf(if (initialDurationMs > 0L) "当前播放" else "还没选歌")
+
+    /** 播放器给的真实时长。搜到同一首时用它，岛上才命中。 */
+    private val playerDurationMs = initialDurationMs
+
+    /** 播放器给的歌名/歌手。搜词只取歌词文本，身份以它为准（见 loadCandidate）。 */
+    private val playerTitle = initialTitle
+    private val playerArtist = initialArtist
+
+    /**
+     * 用户自己手填过歌名或歌手。
+     * 只有「粘贴文本」页那种明确填身份的输入框会置这个标记，搜词页那两格是用来搜词的、不置。
+     * 置了就以用户写的为准，不再被播放器覆盖 —— "我输的你也保存"。
+     */
+    var identityEdited by mutableStateOf(false)
+
+    /** 正在编辑的历史条目 key；为空 = 新建，保存时才对齐到播放器。见 openSaved / saveTo。 */
+    var editingKey by mutableStateOf("")
+
+    /**
+     * 编辑已有轴时是否保留原有行（不按"敲到哪句"截断）。
+     * 打开旧轴默认 true：带上原来每一行的时间，改几句保存也不会把后面几十句截掉；
+     * 点了「清空重敲」才变 false，回到新建时的截断规则。
+     */
+    var keepAllRows by mutableStateOf(false)
+
+    /** 核对页自动舍弃超长行后的提示文案，空串表示没有。 */
+    var dropNotice by mutableStateOf("")
+
+    var searching by mutableStateOf(false)
+    var searchError by mutableStateOf("")
+    var pickingId by mutableStateOf("")
+    /** 手粘歌词（断网兜底用）。 */
+    var pasted by mutableStateOf("")
+    var upgrading by mutableStateOf(false)
+    var upgradeMsg by mutableStateOf("")
+
+    var playing by mutableStateOf(false)
+    var baseMs by mutableStateOf(0L)
+    var startedAt by mutableStateOf(0L)
+    var tick by mutableStateOf(0L)
+
+    /** 由词岛侧注入：返回播放器实时状态（位置 + 是否在播），拿不到返回 null。 */
+    private var liveStateSource: (() -> LiveState?)? = null
+    /** 由词岛侧注入：转发播放/暂停/跳转给真正的播放器。 */
+    private var mediaControl: ((String, Long) -> Unit)? = null
+    /** 跟随系统播放器：位置与播放状态都以播放器为准。 */
+    var following by mutableStateOf(false)
+    /** 用户要跟随、但这会儿还读不到播放器（会话没绑好/刚切歌）——留着这个意向一直重试。 */
+    var followIntent by mutableStateOf(false)
+
+    fun bindLiveState(
+        source: (() -> LiveState?)?,
+        control: ((String, Long) -> Unit)? = null,
+    ) {
+        liveStateSource = source
+        mediaControl = control
+    }
+
+    fun startFollowing() {
+        val s = liveStateSource?.invoke()
+        if (s == null) {
+            // 读不到不等于放弃：进页面那一刻媒体会话可能还没被系统绑上，
+            // 记下意向后由页面每拍重试一次，否则一次失败就一直停在"独立计时"
+            following = false
+            followIntent = true
+            return
+        }
+        baseMs = s.positionMs
+        startedAt = SystemClock.elapsedRealtime()
+        playing = s.playing
+        following = true
+        followIntent = false
+    }
+
+    /**
+     * 每拍校正一次：位置和播放状态都以播放器为准。
+     * 读不到（没会话/切歌中）只把时间停住，**不退出跟随**——
+     * 一旦退出就再也接不回来，这正是"拖回去了它还在走"的原因。
+     */
+    fun syncFromPlayer() {
+        if (!following) return
+        val s = liveStateSource?.invoke()
+        if (s == null) {
+            playing = false
+            return
+        }
+        baseMs = s.positionMs
+        startedAt = SystemClock.elapsedRealtime()
+        playing = s.playing
+    }
+
+    fun control(cmd: String, arg: Long = 0L) {
+        mediaControl?.invoke(cmd, arg)
+    }
+
+    /** 播放 / 暂停：跟着播放器时遥控播放器，否则动打轴器自己的时钟。 */
+    fun playPause() {
+        if (following) control("toggle") else togglePlay()
+    }
+
+    /** 前后跳：本地立刻对齐，再让播放器跳；下一拍以播放器为准。 */
+    fun jump(deltaMs: Long) {
+        val target = (positionMs() + deltaMs).coerceIn(0L, durationMs)
+        baseMs = target
+        startedAt = SystemClock.elapsedRealtime()
+        if (following) control("seek_by", deltaMs)
+    }
+
+    /** 直接跳到某个位置：拖进度条松手走这里。 */
+    fun jumpTo(ms: Long) {
+        val target = ms.coerceIn(0L, durationMs.coerceAtLeast(0L))
+        baseMs = target
+        startedAt = SystemClock.elapsedRealtime()
+        if (following) control("seek_to", target)
+    }
+
+    val draft = mutableStateListOf<DraftLine>()
+    val begins = mutableStateListOf<Long?>()                       // 行首时间
+    val wordsDone = mutableStateListOf<MutableList<Long?>>()       // 行 × 字 的开始时间
+    var cursorLine by mutableStateOf(0)
+    var cursorChar by mutableStateOf(0)
+    var tapMode by mutableStateOf(TapMode.CHAR)                    // 逐字敲 / 快敲
+
+    val results = mutableStateListOf<Candidate>()
+    var savedAxis by mutableStateOf<ManualAxis?>(null)
+    var recentStamp by mutableStateOf(0)
+
+    init {
+        recentStamp = 0
+    }
+
+    /**
+     * 当前位置。
+     * 跟随播放器时每次都直接问播放器（现在指向系统媒体会话，本地调用，很便宜），
+     * 不再用"本地时钟推算 + 每 500ms 硬校准"：那种做法每校准一次就会跳一下，
+     * 打点正好落在校准前后，就会差几十到上百毫秒，逐句看起来就是忽早忽晚。
+     */
+    fun positionMs(): Long {
+        if (following) {
+            val s = liveStateSource?.invoke()
+            if (s != null) {
+                baseMs = s.positionMs
+                startedAt = SystemClock.elapsedRealtime()
+                playing = s.playing
+                return s.positionMs.coerceIn(0L, durationMs.coerceAtLeast(0L))
+            }
+        }
+        val raw = if (playing) baseMs + (SystemClock.elapsedRealtime() - startedAt) else baseMs
+        return raw.coerceIn(0L, durationMs.coerceAtLeast(0L))
+    }
+
+    fun togglePlay() {
+        following = false
+        followIntent = false
+        if (playing) {
+            baseMs = positionMs()
+            playing = false
+        } else {
+            startedAt = SystemClock.elapsedRealtime()
+            playing = true
+        }
+    }
+
+    fun skip(deltaMs: Long) {
+        baseMs = (positionMs() + deltaMs).coerceIn(0L, durationMs)
+        startedAt = SystemClock.elapsedRealtime()
+    }
+
+    // ——— 跳过未勾选行：只挪光标和列表，不动数据 ———
+
+    /** 从 from 开始往后找第一个勾选了的行；没有就返回 draft.size。 */
+    fun nextTappable(from: Int): Int {
+        var i = from.coerceAtLeast(0)
+        while (i < draft.size && !draft[i].keep) i++
+        return i
+    }
+
+    /** 从 from 开始往前找第一个勾选了的行；没有就返回 -1。 */
+    fun prevTappable(from: Int): Int {
+        var i = from.coerceAtMost(draft.size - 1)
+        while (i >= 0 && !draft[i].keep) i--
+        return i
+    }
+
+    fun tap() {
+        cursorLine = nextTappable(cursorLine)
+        if (cursorLine >= draft.size) return
+        val line = wordsDone.getOrNull(cursorLine) ?: return
+        if (line.isEmpty()) { advanceLine(); return }
+        if (tapMode == TapMode.LINE) {
+            // 快敲：只写行首
+            begins[cursorLine] = positionMs()
+            line[0] = begins[cursorLine]
+            advanceLine()
+            return
+        }
+        // 逐字敲：写当前字。按下的那一刻就是听到的那一刻，不再统一减提前量，
+        // 整体的偏早偏晚一律用「调值」统一平移，不在打点时偷偷扣掉
+        val at = positionMs()
+        line[cursorChar] = at
+        if (cursorChar == 0) begins[cursorLine] = at
+        cursorChar += 1
+        if (cursorChar >= line.size) advanceLine()
+    }
+
+    private fun advanceLine() {
+        cursorLine = nextTappable(cursorLine + 1)
+        cursorChar = 0
+    }
+
+    fun undo() {
+        if (cursorChar > 0) {
+            cursorChar -= 1
+            wordsDone[cursorLine][cursorChar] = null
+            if (cursorChar == 0) begins[cursorLine] = null
+            return
+        }
+        if (cursorLine > 0) {
+            val prev = prevTappable(cursorLine - 1)
+            if (prev < 0) return
+            cursorLine = prev
+            val row = wordsDone[cursorLine]
+            cursorChar = (row.size - 1).coerceAtLeast(0)
+            if (row.isNotEmpty()) row[cursorChar] = null
+            begins[cursorLine] = null
+        }
+    }
+
+    /** 真去网上搜：网易云为主、QQ 兜底，结果按时长差排序。 */
+    suspend fun search() {
+        if (searching) return
+        searching = true
+        searchError = ""
+        val kw = title.ifBlank { keyword }
+        val tryRun = runCatching {
+            withContext(Dispatchers.IO) { LyricSearch.search(kw, artist) }
+        }
+        val found = tryRun.getOrElse { emptyList() }
+        withContext(Dispatchers.Main) {
+            results.clear()
+            results.addAll(
+                found.map {
+                    Candidate(
+                        title = it.title,
+                        artist = it.artist,
+                        album = it.album.ifBlank { it.source.uppercase() },
+                        durationMs = it.durationMs,
+                        lines = emptyList(),
+                        hasTiming = false,
+                        web = it,
+                    )
+                }.sortedBy { c ->
+                    if (durationMs > 0L) abs(c.durationMs - durationMs) else c.durationMs
+                }
+            )
+            searchError = when {
+                tryRun.isFailure -> "网络不通或接口暂时不可用，稍后再试"
+                results.isEmpty() -> "没搜到，把歌名改短一点、去掉括号和版本名再试"
+                else -> ""
+            }
+            searching = false
+        }
+    }
+
+    /** 选中一个候选：后台把歌词取回来，取到才进核对页。 */
+    suspend fun pickCandidate(candidate: Candidate) {
+        val web = candidate.web
+        if (web == null) {
+            loadCandidate(candidate)
+            return
+        }
+        if (pickingId.isNotBlank()) return
+        pickingId = web.id
+        searchError = ""
+        val doc = runCatching {
+            withContext(Dispatchers.IO) { LyricSearch.fetchDoc(web) }
+        }.getOrNull()
+        pickingId = ""
+        if (doc == null || doc.lines.isEmpty()) {
+            searchError = "这首拿不到歌词，换一个候选试试"
+            return
+        }
+        loadCandidate(candidate.copy(lines = doc.lines, hasTiming = true))
+    }
+
+    /**
+     * 可选升级：去 LRCLIB 查在线逐字轴。命中就整份换成逐字的，用户几乎不用敲。
+     * 这是可选路径，不放在搜索主流程里，避免每次搜词白等。
+     */
+    suspend fun upgradeToWordSync() {
+        if (upgrading) return
+        if (title.isBlank()) {
+            upgradeMsg = "先选一首歌"
+            return
+        }
+        upgrading = true
+        upgradeMsg = ""
+        val doc = runCatching {
+            withContext(Dispatchers.IO) { LyricSearch.fetchWordSync(title, artist, durationMs) }
+        }.getOrNull()
+        upgrading = false
+        if (doc == null || doc.wordTimes == null || doc.lines.isEmpty()) {
+            upgradeMsg = "这首没有在线逐字轴，接着手敲就行"
+            return
+        }
+        applyWordDoc(doc)
+    }
+
+    /** 把带逐字时间的文档铺成待敲状态：行首取第一个字的时间，字时间逐格填好。 */
+    private fun applyWordDoc(doc: LyricDoc) {
+        draft.clear()
+        draft.addAll(doc.lines.map { DraftLine(it) })
+        begins.clear()
+        wordsDone.clear()
+        doc.lines.forEachIndexed { i, text ->
+            val times = doc.wordTimes?.getOrNull(i)
+            val tokens = AxisTokenizer.split(text)
+            begins.add(times?.firstOrNull { it != null })
+            wordsDone.add(MutableList(tokens.size) { ti -> times?.getOrNull(ti) })
+        }
+        cursorLine = nextTappable(0)
+        cursorChar = 0
+        sourceLabel = "在线逐字轴 · ${doc.lines.size} 句"
+        upgradeMsg = "已导入在线逐字轴，${doc.lines.size} 句"
+        route = Route.Tap
+    }
+
+    /** 断网 / 没搜到时的兜底：把手粘的歌词切成行直接用。 */
+    fun usePasted(): Boolean {
+        val lines = LyricSearch.clean(pasted)
+        if (lines.isEmpty()) return false
+        draft.clear()
+        draft.addAll(lines.map { DraftLine(it) })
+        begins.clear()
+        draft.indices.forEach { begins.add(null) }
+        wordsDone.clear()
+        draft.indices.forEach { i ->
+            wordsDone.add(MutableList(AxisTokenizer.split(draft[i].text).size) { null })
+        }
+        cursorLine = nextTappable(0)
+        cursorChar = 0
+        baseMs = 0L
+        playing = false
+        following = false
+        startFollowing()
+        editingKey = ""
+        keepAllRows = false
+        identityEdited = false
+        dropLinesOutOfRange()
+        sourceLabel = "手动粘贴 · ${lines.size} 句"
+        route = Route.Tap
+        return true
+    }
+
+    /**
+     * 本地 .lrc / .txt 导入后落进编辑状态。
+     * 带时间的行直接把时间填进 begins，敲轴页能看到哪些句已经就位；
+     * 统一进核对页，让用户先决定哪几行要敲。
+     */
+    fun loadImported(imported: ImportedLyric, label: String): Boolean {
+        if (imported.lines.isEmpty()) return false
+        reviewFrom = Route.Home
+        if (imported.title.isNotBlank()) title = imported.title
+        if (imported.artist.isNotBlank()) artist = imported.artist
+        if (imported.durationMs > 0L) durationMs = imported.durationMs
+        // 本地文件 / 粘贴文本同样对齐到正在播的那首（歌名对得上才算同一首）
+        alignToPlayer()
+        keyword = title
+        draft.clear()
+        draft.addAll(imported.lines.map { DraftLine(it) })
+        begins.clear()
+        draft.indices.forEach { i -> begins.add(imported.begins.getOrNull(i)) }
+        wordsDone.clear()
+        draft.indices.forEach { i ->
+            val n = AxisTokenizer.split(draft[i].text).size
+            val fromFile = imported.wordsByLine.getOrNull(i)
+            if (fromFile != null && fromFile.isNotEmpty()) {
+                // 文件里的逐字粒度和本地分词不一定一致，按位置对齐，缺的留 null 交给均分
+                wordsDone.add(MutableList(n) { k -> fromFile.getOrNull(k) })
+            } else {
+                wordsDone.add(MutableList(n) { null })
+            }
+        }
+        cursorLine = nextTappable(0)
+        cursorChar = 0
+        baseMs = 0L
+        playing = false
+        following = false
+        startFollowing()
+        // 新建的一条轴，清掉"编辑中"标记
+        editingKey = ""
+        keepAllRows = false
+        // 导入的 lrc 自带时间：比歌还长的句子永远播不到，先自动取消勾选
+        dropLinesOutOfRange()
+        sourceLabel = label
+        route = Route.Review
+        return true
+    }
+
+    /** 读本地文件的文本（.lrc / .txt 都按纯文本读）。 */
+    fun importLocalFile(context: Context, uri: Uri): Boolean {
+        val text = runCatching {
+            context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+        }.getOrNull().orEmpty()
+        if (text.isBlank()) return false
+        val name = runCatching {
+            context.contentResolver.query(uri, null, null, null, null)?.use { c ->
+                val idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (idx >= 0 && c.moveToFirst()) c.getString(idx) else null
+            }
+        }.getOrNull()
+        val imported = LocalLyricImport.parse(
+            raw = text,
+            fallbackTitle = title,
+            fallbackArtist = artist,
+            fallbackDurationMs = durationMs,
+        )
+        return loadImported(
+            imported,
+            "本地文件${if (name != null) " · $name" else ""} · ${imported.lines.size} 句" +
+                if (imported.hasAnyTiming) "（自带时间）" else ""
+        )
+    }
+
+    /** 打开已存的轴继续改：**带出原来的时间**，不再清空重敲。 */
+    fun openSaved(context: Context, entry: AxisIndexEntry): Boolean {
+        val store = AxisStore(File(context.filesDir, "lyrics/manual"))
+        val axis = runCatching { store.load(entry.songKey) }.getOrNull() ?: return false
+        title = axis.title
+        artist = axis.artist
+        durationMs = axis.durationMs
+        // 记住原条目：保存时写回这一份，不新建一条，免得"点了保存像没反应"
+        editingKey = entry.songKey
+        identityEdited = false
+        dropNotice = ""
+        offsetMs = axis.offsetMs
+        sourceLabel = "已存的轴 · ${axis.lines.size} 句"
+        draft.clear()
+        draft.addAll(axis.lines.map { DraftLine(it.text) })
+        begins.clear()
+        wordsDone.clear()
+        axis.lines.forEach { l ->
+            val tokens = AxisTokenizer.split(l.text).size
+            // 没有时间的行保持 null（由保存时的 fillMissing 补），有时间的原样带出来
+            begins.add(l.beginMs.takeIf { it > 0L } ?: null)
+            val wordTimes = l.words.map { it.beginMs }
+            wordsDone.add(MutableList(tokens) { i -> wordTimes.getOrNull(i) })
+        }
+        // 编辑已有轴：行数按原来的句子走，不因为"只改了一两句"把后面整段截掉
+        keepAllRows = true
+        cursorLine = nextTappable(0)
+        cursorChar = 0
+        baseMs = 0L
+        playing = false
+        following = false
+        startFollowing()
+        route = Route.Tap
+        return true
+    }
+
+    /** 把带出来的旧时间全部清空，从头再敲一遍（行数仍保留）。 */
+    fun clearTimesForRewrite() {
+        begins.indices.forEach { begins[it] = null }
+        wordsDone.clear()
+        draft.forEach { wordsDone.add(MutableList(AxisTokenizer.split(it.text).size) { null }) }
+        keepAllRows = false
+        cursorLine = nextTappable(0)
+        cursorChar = 0
+        baseMs = 0L
+    }
+
+    /**
+     * 整首一起往前/往后挪。
+     *
+     * 敲完发现"全都早了半秒"或者"全都晚了"，不用逐句重敲：把已有的行时间和逐字时间
+     * 统一加一个偏移就行，[deltaMs] 为负是往前、为正往后。没有时间的行保持 null。
+     */
+    fun shiftAll(deltaMs: Long) {
+        begins.indices.forEach { i ->
+            val v = begins[i] ?: return@forEach
+            begins[i] = (v + deltaMs).coerceAtLeast(0L)
+        }
+        wordsDone.forEachIndexed { li, list ->
+            for (k in list.indices) {
+                val v = list[k] ?: continue
+                list[k] = (v + deltaMs).coerceAtLeast(0L)
+            }
+        }
+    }
+
+    fun loadCandidate(candidate: Candidate) {
+        reviewFrom = Route.Search
+        title = candidate.title
+        artist = candidate.artist
+        durationMs = candidate.durationMs
+        // 歌词来自哪条候选不重要，身份整段换成正在播的那首：歌名、歌手、秒数全以播放器为准
+        forceAlignToPlayer()
+        sourceLabel = "${candidate.album} · ${candidate.lines.size} 句"
+        draft.clear()
+        draft.addAll(candidate.lines.map { DraftLine(it) })
+        begins.clear()
+        draft.indices.forEach { begins.add(null) }
+        wordsDone.clear()
+        draft.indices.forEach { i ->
+            val n = AxisTokenizer.split(draft[i].text).size
+            wordsDone.add(MutableList(n) { null })
+        }
+        cursorLine = nextTappable(0)
+        cursorChar = 0
+        baseMs = 0L
+        playing = false
+        following = false
+        // 这首歌正在播就自动跟上，用户不用自己按播放
+        startFollowing()
+        // 新建的一条轴
+        editingKey = ""
+        keepAllRows = false
+        identityEdited = false
+        dropLinesOutOfRange()
+        // 取完词先进核对页，核对完用户自己点「去敲轴」
+        route = Route.Review
+    }
+
+    fun back() {
+        route = when (route) {
+            Route.Home -> Route.Home
+            Route.Search -> Route.Home
+            Route.Paste -> Route.Home
+            Route.Review -> reviewFrom
+            Route.Tap -> Route.Review
+            Route.Proofread -> Route.Tap
+            Route.Save -> Route.Home
+            Route.Transfer -> Route.Home
+        }
+    }
+
+    fun resetTiming() {
+        begins.clear()
+        draft.indices.forEach { begins.add(null) }
+        wordsDone.forEach { it.indices.forEach { k -> it[k] = null } }
+        cursorLine = nextTappable(0)
+        cursorChar = 0
+    }
+
+    /** 搜词结果里哪一条就是正在播的这首 —— 界面上标出来，用户直接点它。 */
+    fun isNowPlaying(candidate: Candidate): Boolean =
+        playerTitle.isNotBlank() && SongKey.sameSong(candidate.title, playerTitle)
+
+    /**
+     * 时长是客观事实，播放器测出来的，任何入口都对齐，**不受手改歌名影响**。
+     *
+     * 这一句必须放在两个 align 函数的 return 之前：用户在核对页改了歌名，
+     * identityEdited 就会 true，如果把时长塞在 applyPlayerIdentity 里，
+     * 整段被跳过，时长还停在上一条候选的 223 秒 → 播放器是 202 秒 → 反而命中不了。
+     * 越纠越错就是这么来的。
+     */
+    private fun applyPlayerDuration() {
+        if (playerDurationMs > 0L) durationMs = playerDurationMs
+    }
+
+    /**
+     * 把身份对齐到"正在播的那首"（只在确实同一首时动）。
+     *
+     * 岛上的查询键是「歌名|歌手|时长秒」，这三个值全由播放器现场给出。
+     * 用于「重打旧轴」「导入本地文件」这类入口：歌名对得上就换成播放器的写法，
+     * 对不上就保持原样，免得把 A 歌的轴挂到 B 歌头上。
+     *
+     * 唯一例外：用户在「粘贴文本」页或核对页手填了歌名或歌手（identityEdited），那以他写的为准。
+     * 但时长照旧以播放器为准。
+     */
+    internal fun alignToPlayer(): Boolean {
+        applyPlayerDuration()
+        if (playerTitle.isBlank()) return false
+        if (identityEdited) return false
+        if (!SongKey.sameSong(title, playerTitle)) return false
+        title = playerTitle
+        artist = playerArtist
+        return true
+    }
+
+    /**
+     * 无条件对齐到正在播的那首。
+     *
+     * 用在「点了搜词结果」之后：歌词是别的版本/别人翻唱的候选，歌名和歌手都可能跟播的不一样，
+     * 但用户要的就是拿这份歌词给正在听的这首歌打轴，所以歌名歌手整段换成播放器的。
+     * 一句话：歌词可以来自任何人，身份只认正在播的那首。时长同样照旧对齐。
+     */
+    internal fun forceAlignToPlayer(): Boolean {
+        applyPlayerDuration()
+        if (playerTitle.isBlank()) return false
+        if (identityEdited) return false
+        title = playerTitle
+        artist = playerArtist
+        return true
+    }
+
+    // ——— 核对页编辑：改字 / 删行 / 改名 / 丢超长行 ———
+
+    /**
+     * 改一行文字。
+     * 字数变了，这一行的字级时间必须重置，否则原有时间点和新的字对不上，会串到相邻行。
+     * 行首时间（begins）保留：整句在哪儿开始没被改文字影响。
+     */
+    fun updateLineText(index: Int, text: String) {
+        if (index !in draft.indices) return
+        draft[index].text = text
+        if (index in wordsDone.indices) {
+            wordsDone[index] = MutableList(AxisTokenizer.split(text).size) { null }
+        }
+    }
+
+    /**
+     * 删掉一行。
+     * draft / begins / wordsDone 三个列表**必须同时删**——buildAxis 按同一个索引取三个列表的值，
+     * 只删一个会让后面全部错位一行：第 5 句的文本配上第 6 句的时间。
+     */
+    fun removeLine(index: Int) {        if (index !in draft.indices) return
+        draft.removeAt(index)
+        if (index in begins.indices) begins.removeAt(index)
+        if (index in wordsDone.indices) wordsDone.removeAt(index)
+        cursorLine = nextTappable(0)
+        cursorChar = 0
+    }
+
+    /**
+     * 把某一行和相邻行（[delta] 为 -1 上移 / +1 下移）换位置。
+     *
+     * 三个列表一起换：文字、行首时间、逐字时间跟着这一行走，
+     * 所以只是"这句唱早了/晚了"的顺序问题，换完时间还对得上，不会串到别句。
+     */
+    /**
+     * 校对页：整句平移。
+     * 行首时间和句内每个字一起挪，句内相对位置不变——
+     * 用来修「这一句整体早了/晚了」，不会把句内的字挪乱。
+     */
+    fun nudgeLine(index: Int, deltaMs: Long) {
+        val cur = begins.getOrNull(index) ?: return
+        begins[index] = (cur + deltaMs).coerceAtLeast(0L)
+        wordsDone.getOrNull(index)?.let { row ->
+            row.indices.forEach { k ->
+                row[k]?.let { row[k] = (it + deltaMs).coerceAtLeast(0L) }
+            }
+        }
+    }
+
+    /**
+     * 校对页：只挪这一句的行首（句内字不动）。
+     * 用于「句子起点正好，但句内逐字需要单独修」的场合。
+     */
+    fun nudgeLineBeginOnly(index: Int, deltaMs: Long) {
+        val cur = begins.getOrNull(index) ?: return
+        begins[index] = (cur + deltaMs).coerceAtLeast(0L)
+    }
+
+    /** 校对页：微调某一个字的开始时间（负=提前）。 */
+    fun nudgeWord(lineIndex: Int, wordIndex: Int, deltaMs: Long) {
+        val row = wordsDone.getOrNull(lineIndex) ?: return
+        if (wordIndex !in row.indices) return
+        val cur = row[wordIndex] ?: begins.getOrNull(lineIndex) ?: 0L
+        row[wordIndex] = (cur + deltaMs).coerceAtLeast(0L)
+    }
+
+    /**
+     * 校对页：删掉某一个字。
+     * 原文里抠掉这段字符，同时把它的时间从逐字表里删掉——
+     * 两边必须同步，否则字和时间再次错位一格，后面的字全会偏。
+     */
+    fun deleteWord(lineIndex: Int, wordIndex: Int) {
+        val d = draft.getOrNull(lineIndex) ?: return
+        val tokens = AxisTokenizer.splitWithRange(d.text)
+        val tok = tokens.getOrNull(wordIndex) ?: return
+        d.text = d.text.removeRange(tok.start, tok.end)
+        wordsDone.getOrNull(lineIndex)?.let { row ->
+            if (wordIndex in row.indices) row.removeAt(wordIndex)
+        }
+    }
+
+    fun moveLine(index: Int, delta: Int) {
+        val to = index + delta
+        if (index !in draft.indices || to !in draft.indices) return
+        val line = draft[index]
+        draft[index] = draft[to]
+        draft[to] = line
+        if (index in begins.indices && to in begins.indices) {
+            val t = begins[index]
+            begins[index] = begins[to]
+            begins[to] = t
+        }
+        if (index in wordsDone.indices && to in wordsDone.indices) {
+            val w = wordsDone[index]
+            wordsDone[index] = wordsDone[to]
+            wordsDone[to] = w
+        }
+    }
+
+    /**
+     * 按行首时间重排整份歌词。
+     *
+     * 导入的 LRC 时间码经常是乱的，甚至有倒着写的（第 5 句比第 4 句还早），
+     * 一句句手动挪太费劲。这里按时间从小到大排，没有时间的行统一排到最后，
+     * 交给敲打时按顺序赋时间。
+     */
+    fun sortByTime() {
+        if (draft.size < 2) return
+        val order = draft.indices.sortedWith(
+            compareBy(
+                { begins.getOrNull(it) == null },
+                { begins.getOrNull(it) ?: Long.MAX_VALUE },
+                { it }
+            )
+        )
+        val newDraft = order.map { draft[it] }
+        val newBegins = order.map { begins.getOrNull(it) }
+        val newWords = order.map { wordsDone.getOrNull(it) }
+        draft.clear()
+        newDraft.forEach { draft.add(it) }
+        begins.clear()
+        newBegins.forEach { begins.add(it) }
+        wordsDone.clear()
+        newWords.forEach { wordsDone.add(it ?: MutableList(0) { null }) }
+        cursorLine = nextTappable(0)
+        cursorChar = 0
+    }
+
+    /**
+     * 舍弃超出歌长的行（只在带时间的歌词上判断）。
+     * 导入的 lrc 自带时间，比歌还长的那些句子永远播不到，直接取消勾选。
+     * 纯文本导入没有时间，判断不了，那条走 buildAxis 的 lastTapped 截断。
+     */
+    fun dropLinesOutOfRange() {
+        if (durationMs <= 0L) {
+            dropNotice = ""
+            return
+        }
+        var dropped = 0
+        draft.forEachIndexed { i, line ->
+            val b = begins.getOrNull(i)
+            if (b != null && b >= durationMs && line.keep) {
+                line.keep = false
+                dropped++
+            }
+        }
+        dropNotice = if (dropped > 0) {
+            "已自动舍弃 $dropped 句（超出这首歌 ${mmss(durationMs)}）"
+        } else {
+            ""
+        }
+    }
+
+    /** 核对页改歌名 / 歌手：改了就以你为准，保存时不再被播放器覆盖（时长仍然听播放器的）。 */
+    fun updateIdentity(newTitle: String? = null, newArtist: String? = null) {
+        if (newTitle != null) title = newTitle
+        if (newArtist != null) artist = newArtist
+        identityEdited = true
+    }
+
+    fun buildAxis(): ManualAxis? {
+        /*
+         * 只保留"敲到最后一句"之前的行。
+         * 手动从头敲的时候，敲到第 20 句歌就结束了，第 21 句往后本来就不存在，
+         * 把她们一起存进去会得到一堆时间全挤在末尾的假行。lastTapped 就是这条刀口。
+         * 一句都没敲时（={}）走 draft.size-1，交给 saveTo 的「一句都没敲」拦截去挡，不在这里产出废轴。
+         */
+        val lastTapped = draft.indices.lastOrNull { begins.getOrNull(it) != null } ?: -1
+        // 编辑已有轴时不做这个截断：只改前几句就保存，后面的行必须原样留着，
+        // 否则保存出来的轴只剩前几句，岛上播到后面就没歌词了。
+        val cut = when {
+            keepAllRows -> draft.size - 1
+            lastTapped >= 0 -> lastTapped
+            else -> draft.size - 1
+        }
+        val keptIdx = draft.indices.filter { draft[it].keep && it <= cut }
+        if (keptIdx.isEmpty()) return null
+
+        // 第一层：补行（沿用现有 fillMissing，一个字不改）
+        val filledLines = AxisValidator.fillMissing(begins.toList(), durationMs)
+        val texts = keptIdx.map { draft[it].text }
+        val starts = keptIdx.map { filledLines[it] }
+
+        // 第二层：补字
+        val wordsForKept = keptIdx.map { i -> wordsDone.getOrNull(i)?.toList() }
+
+        val lines = AxisValidator.toAxisLines(texts, starts, durationMs, wordsForKept)
+
+        return ManualAxis(
+            schema = 2,
+            songKey = SongKey.of(title, artist, durationMs),
+            title = title,
+            artist = artist,
+            durationMs = durationMs,
+            leadMs = leadMs,
+            offsetMs = offsetMs,
+            precision = if (wordsForKept.any { it?.any { v -> v != null } == true }) Precision.CHAR else Precision.LINE,
+            createdAt = System.currentTimeMillis(),
+            lines = lines,
+        )
+    }
+
+    fun saveTo(context: Context): Boolean {
+        /*
+         * 一句都没敲就保存，等于把岛上正在用的轴换成一条时间全是 0 的废轴：
+         * fillMissing 对全空的行只会返回 0，fillWords 再按每字 80ms 均分，
+         * 结果 44 句全挤在第 0 秒，画面上看起来就是"歌词没了"。
+         * 更糟的是它会直接覆盖掉之前已经敲好的同一首歌的轴。
+         */
+        if (begins.count { it != null } == 0) {
+            Toast.makeText(context, "一句都还没敲，先敲一句再保存", Toast.LENGTH_SHORT).show()
+            return false
+        }
+        // 存之前再对齐一次。
+        // 新建（从搜词 / 粘贴 / 本地文件来）：无条件认正在播的那首，保证岛上一定查得到。
+        // 重打旧轴（editingKey 非空）：**名字不动**，只把时长对齐到播放器 ——
+        // 否则用户点开 DJ 版重打、而正在放舒缓版，改完会存成舒缓版一条新的，DJ 版那份一个字没变，
+        // 他会以为"点了保存没反应"。
+        if (editingKey.isBlank()) {
+            forceAlignToPlayer()
+        } else {
+            applyPlayerDuration()
+        }
+        val axis = buildAxis()
+        if (axis == null) {
+            Toast.makeText(context, "没有可保存的行，检查一下歌词勾选", Toast.LENGTH_SHORT).show()
+            return false
+        }
+        val store = AxisStore(File(context.filesDir, "lyrics/manual"))
+        store.save(axis, editingKey.takeIf { it.isNotBlank() })
+        editingKey = ""
+        keepAllRows = false
+        // 通知 SystemUI 重新读盘：正在播的这首不用切歌也能立刻换成新轴
+        // 顺便把这条轴的数据推过去，SystemUI 存在自己目录里，以后播放不必再叫醒 App
+        ManualAxisApi.notifySaved(context, axis)
+        savedAxis = axis
+        recentStamp += 1
+        route = Route.Save
+        return true
+    }
+
+    fun exportLrc(context: Context): String? {
+        val axis = savedAxis ?: return null
+        val dir = context.getExternalFilesDir(null) ?: context.filesDir
+        val file = File(dir, "axis-${abs(axis.songKey.hashCode())}.lrc")
+        file.writeText(LrcWriter.format(axis))
+        return file.absolutePath
+    }
+
+    // —— 轴文件分享：导出单首 / 导出整库 / 导入（SAF，不需要服务器）——
+
+    /**
+     * 首页「导入导出」里按 songKey 取一首已存的轴，导出通用 LRC（任何播放器都能直接用）。
+     * 和 SaveScreen 的 exportLrc 区别：那边只导"当前这一首"，这边能导库里任意一首。
+     */
+    fun exportLrcOf(context: Context, axis: ManualAxis, uri: Uri): Boolean = runCatching {
+        context.contentResolver.openOutputStream(uri)?.use { os ->
+            os.write(LrcWriter.format(axis).toByteArray(Charsets.UTF_8))
+        } != null
+    }.getOrDefault(false)
+
+    /** 同一首的逐字版（Enhanced LRC），只对认 `<mm:ss.xx>` 的播放器有效。 */
+    fun exportWordsOf(context: Context, axis: ManualAxis, uri: Uri): Boolean = runCatching {
+        context.contentResolver.openOutputStream(uri)?.use { os ->
+            os.write(LrcWriter.formatEnhanced(axis).toByteArray(Charsets.UTF_8))
+        } != null
+    }.getOrDefault(false)
+
+    /** 同上，但导出 .axis.json（原生格式，别人导进来能直接用）。 */
+    fun exportAxisOf(context: Context, axis: ManualAxis, uri: Uri): Boolean =
+        AxisExporter.exportOne(context, uri, axis)
+
+    fun exportTo(context: Context, uri: Uri): Boolean {
+        val axis = savedAxis ?: buildAxis() ?: return false
+        return AxisExporter.exportOne(context, uri, axis)
+    }
+
+    fun exportAllTo(context: Context, uri: Uri): Boolean =
+        AxisExporter.exportAll(context, uri)
+
+    fun importFrom(context: Context, uri: Uri): ImportReport {
+        val name = context.contentResolver.getType(uri).orEmpty()
+        val report = if (name.contains("zip")) {
+            AxisExporter.importAll(context, uri)
+        } else {
+            AxisExporter.importOne(context, uri)
+        }
+        if (report.ok > 0) recentStamp += 1
+        return report
+    }
+}
+
+internal fun mmss(ms: Long): String {
+    val total = (ms / 1000).coerceAtLeast(0L)
+    return java.lang.String.format("%02d:%02d", total / 60, total % 60)
+}
+
+internal fun mmssCentis(ms: Long): String {
+    val total = ms.coerceAtLeast(0L)
+    val sec = total / 1000
+    val centis = (total % 1000) / 10
+    return java.lang.String.format("%02d:%02d.%02d", sec / 60, sec % 60, centis)
+}
+
+@Composable
+fun AxisApp(
+    onClose: () -> Unit = {},
+    initialTitle: String = "",
+    initialArtist: String = "",
+    initialDurationMs: Long = 0L,
+    liveState: (() -> LiveState?)? = null,
+    onControl: ((String, Long) -> Unit)? = null,
+) {
+    // 词岛侧带过来正在播放的歌时，直接进搜词页并自动开搜，省得用户再敲一遍名字
+    val prefilled = initialTitle.isNotBlank()
+    val state = remember {
+        AxisState(
+            initialTitle = initialTitle,
+            initialArtist = initialArtist,
+            initialDurationMs = initialDurationMs.takeIf { it > 0L } ?: 0L,
+            startAtSearch = prefilled,
+        )
+    }
+    LaunchedEffect(liveState, onControl) {
+        state.bindLiveState(liveState, onControl)
+        if (prefilled) state.startFollowing()
+    }
+    BackHandler(enabled = state.route != Route.Home) { state.back() }
+    when (state.route) {
+        Route.Home -> HomeScreen(state, onClose)
+        Route.Search -> SearchScreen(state)
+        Route.Paste -> PasteScreen(state)
+        Route.Review -> ReviewScreen(state)
+        Route.Tap -> TapScreen(state)
+        Route.Proofread -> ProofreadScreen(state)
+        Route.Save -> SaveScreen(state)
+        Route.Transfer -> TransferScreen(state)
+    }
+}
+
+@Composable
+private fun HomeScreen(state: AxisState, onClose: () -> Unit) {
+    val context = LocalContext.current
+    val recent = remember(state.recentStamp) {
+        runCatching { AxisStore(File(context.filesDir, "lyrics/manual")).list().take(3) }
+            .getOrDefault(emptyList())
+    }
+    // .lrc / .txt 都按纯文本读，选文件后直接进核对页
+    val askLocalFile = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null && !state.importLocalFile(context, uri)) {
+            Toast.makeText(context, "这个文件读不出歌词", Toast.LENGTH_SHORT).show()
+        }
+    }
+    AxisScreen(
+        title = "打轴器",
+        subtitle = "边听边敲，敲完存本地，岛会优先用它",
+        onBack = onClose
+    ) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                EntryCard("网上搜词", "没歌词先搜一份", Modifier.weight(1f)) {
+                    state.route = Route.Search
+                }
+                EntryCard("本地文件", ".lrc / .txt", Modifier.weight(1f)) {
+                    askLocalFile.launch(arrayOf("*/*"))
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                EntryCard("粘贴文本", "手动粘进来", Modifier.weight(1f)) {
+                    state.route = Route.Paste
+                }
+                EntryCard("当前播放取词", "从播放器读词", Modifier.weight(1f)) {
+                    if (state.title.isBlank()) {
+                        Toast.makeText(context, "没在播放，先手动填歌名搜", Toast.LENGTH_SHORT).show()
+                        state.keyword = ""
+                        state.route = Route.Search
+                    } else {
+                        // 已经是正在播的这首，直接搜
+                        state.keyword = state.title
+                        state.results.clear()
+                        state.route = Route.Search
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            EntryCard("导入导出", "轴文件 · LRC · 整库备份", Modifier.fillMaxWidth()) {
+                state.route = Route.Transfer
+            }
+
+            SectionLabel("最近打轴")
+            AxisCard {
+                if (recent.isEmpty()) {
+                    Text("还没有保存过的轴", fontSize = 14.sp, color = AxisColors.TextSecondary)
+                    Spacer(Modifier.height(6.dp))
+                    Text("先挑一首没歌词的歌，敲一遍试试", fontSize = 12.sp, color = AxisColors.TextSecondary)
+                } else {
+                    recent.forEachIndexed { index, entry ->
+                        if (index > 0) {
+                            Spacer(Modifier.height(10.dp))
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(1.dp)
+                                    .background(AxisColors.Line)
+                            )
+                            Spacer(Modifier.height(10.dp))
+                        }
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    if (!state.openSaved(context, entry)) {
+                                        Toast.makeText(context, "这条轴读不出来，可能文件被删了", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                        ) {
+                            InfoRow(entry.title + " · " + entry.artist, entry.lineCount.toString() + " 句 · 点一下继续改")
+                        }
+                    }
+                    if (recent.isNotEmpty()) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            text = "点任意一条 = 打开接着改，原来的时间都在；想从头重敲，进去点「清空时间，从头重敲」",
+                            fontSize = 11.sp,
+                            color = AxisColors.TextSecondary
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+/**
+ * 首页「导入导出」。
+ *
+ * 单开一页而不是塞在"保存之后"的页面里，因为多数时候人只想把别人的轴导进来，
+ * 压根不想先敲一遍。这一页不管你有没有在打轴都能进。
+ *
+ * 四件事：
+ *   1. 导入轴文件（.json / .zip）—— 别人敲好的轴，进来就能直接用；
+ *   2. 导入歌词（.lrc / .txt）—— 只有词，还得自己敲，直接进核对页；
+ *   3. 导出整库 zip —— 备份 / 换机；
+ *   4. 单首导出 .axis.json 或 .lrc —— 按库里现有的每一首，各导各的。
+ */
+@Composable
+private fun TransferScreen(state: AxisState) {
+    val context = LocalContext.current
+    var hint by remember { mutableStateOf("") }
+    var pending by remember { mutableStateOf<ManualAxis?>(null) }
+    val store = remember { AxisStore(File(context.filesDir, "lyrics/manual")) }
+    val all = remember(state.recentStamp) {
+        runCatching { store.list() }.getOrDefault(emptyList())
+    }
+
+    val askImport = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            val name = displayName(context, uri).lowercase()
+            val mime = context.contentResolver.getType(uri).orEmpty().lowercase()
+            hint = when {
+                // 轴文件：原生 json，或整库 zip
+                name.endsWith(".axis.json") || name.endsWith(".json") || mime.contains("json") ->
+                    state.importFrom(context, uri).label()
+                name.endsWith(".zip") || mime.contains("zip") ->
+                    state.importFrom(context, uri).label()
+                // 其余当歌词读：.lrc / .txt
+                else ->
+                    if (state.importLocalFile(context, uri)) "已读入歌词，进核对页" else "这个文件读不出歌词"
+            }
+        }
+    }
+
+    val askExportAll = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        if (uri != null) {
+            hint = if (state.exportAllTo(context, uri)) "已导出整库" else "整库导出失败（可能还没有任何轴）"
+        }
+    }
+
+    val askExportAxis = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        val axis = pending
+        if (uri != null && axis != null) {
+            hint = if (state.exportAxisOf(context, axis, uri)) "已导出 ${axis.title}.axis.json" else "导出失败"
+        }
+    }
+
+    val askExportLrc = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri ->
+        val axis = pending
+        if (uri != null && axis != null) {
+            hint = if (state.exportLrcOf(context, axis, uri)) "已导出 ${axis.title}.lrc" else "导出失败"
+        }
+    }
+
+    val askExportWords = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri ->
+        val axis = pending
+        if (uri != null && axis != null) {
+            hint = if (state.exportWordsOf(context, axis, uri)) {
+                "已导出 ${axis.title}.words.lrc（逐字，仅部分播放器认）"
+            } else {
+                "导出失败"
+            }
+        }
+    }
+
+    AxisScreen(
+        title = "导入导出",
+        subtitle = "把别人的轴拿进来，或者把自己的轴给出去",
+        onBack = { state.route = Route.Home }
+    ) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
+        ) {
+            SectionLabel("拿进来")
+            AxisCard {
+                Text(
+                    "轴文件（.axis.json / .zip）：别人敲好的轴，导进来直接能用。",
+                    fontSize = 12.sp,
+                    color = AxisColors.TextSecondary
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "歌词文件（.lrc / .txt）：只有词，导进来还得自己敲，会先进核对页。",
+                    fontSize = 12.sp,
+                    color = AxisColors.TextSecondary
+                )
+                Spacer(Modifier.height(12.dp))
+                GhostButton("选择文件导入", Modifier.fillMaxWidth()) {
+                    askImport.launch(arrayOf("*/*"))
+                }
+            }
+
+            SectionLabel("给出去")
+            AxisCard {
+                GhostButton("导出整库（zip）", Modifier.fillMaxWidth()) {
+                    askExportAll.launch("axis-backup-${System.currentTimeMillis()}.zip")
+                }
+            }
+
+            SectionLabel("单首导出（${all.size} 首）")
+            AxisCard {
+                if (all.isEmpty()) {
+                    Text("还没有保存过的轴", fontSize = 14.sp, color = AxisColors.TextSecondary)
+                } else {
+                    all.forEachIndexed { index, entry ->
+                        if (index > 0) {
+                            Spacer(Modifier.height(10.dp))
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(1.dp)
+                                    .background(AxisColors.Line)
+                            )
+                            Spacer(Modifier.height(10.dp))
+                        }
+                        Column {
+                            InfoRow(entry.title + " · " + entry.artist, entry.lineCount.toString() + " 句")
+                            Spacer(Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                GhostButton("导出 .axis.json", Modifier.weight(1f)) {
+                                    val axis = store.load(entry.songKey)
+                                    if (axis == null) {
+                                        hint = "这首的轴文件读不出来，可能已经被删了"
+                                    } else {
+                                        pending = axis
+                                        askExportAxis.launch("${axis.title}-${axis.artist}.axis.json")
+                                    }
+                                }
+                                GhostButton("导出 .lrc", Modifier.weight(1f)) {
+                                    val axis = store.load(entry.songKey)
+                                    if (axis == null) {
+                                        hint = "这首的轴文件读不出来，可能已经被删了"
+                                    } else {
+                                        pending = axis
+                                        askExportLrc.launch("${axis.title}-${axis.artist}.lrc")
+                                    }
+                                }
+                                GhostButton("逐字 LRC", Modifier.weight(1f)) {
+                                    val axis = store.load(entry.songKey)
+                                    if (axis == null) {
+                                        hint = "这首的轴文件读不出来，可能已经被删了"
+                                    } else {
+                                        pending = axis
+                                        askExportWords.launch("${axis.title}-${axis.artist}.words.lrc")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (hint.isNotBlank()) {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = hint,
+                    fontSize = 12.sp,
+                    color = AxisColors.TextSecondary,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                ".lrc 是通用格式，任何播放器都能直接放；逐字 LRC 只给认尖括号时间的播放器用，别的播放器可能把角标当正文显示。",
+                fontSize = 11.sp,
+                color = AxisColors.TextSecondary
+            )
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+/** 取 SAF 里文件的原名，用来判断这份是轴文件还是歌词文件。 */
+private fun displayName(context: Context, uri: Uri): String {
+    return runCatching {
+        context.contentResolver.query(
+            uri,
+            arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+            null,
+            null,
+            null
+        )?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+    }.getOrNull() ?: uri.lastPathSegment.orEmpty()
+}
+
+@Composable
+private fun SearchScreen(state: AxisState) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    // 从首页/当前播放进来时自动搜一次；搜过就不重复搜
+    LaunchedEffect(Unit) {
+        if (state.results.isEmpty() && !state.searching && (state.title.isNotBlank() || state.keyword.isNotBlank())) {
+            state.search()
+        }
+    }
+    AxisScreen(
+        title = "网上搜词",
+        subtitle = "网易云为主、QQ 音乐兜底，改完再搜更准",
+        onBack = { state.route = Route.Home }
+    ) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
+        ) {
+            AxisCard {
+                Field("歌名", state.title) { state.title = it }
+                Spacer(Modifier.height(10.dp))
+                Field("歌手", state.artist) { state.artist = it }
+                Spacer(Modifier.height(10.dp))
+                Field("补充词", state.keyword) { state.keyword = it }
+                Spacer(Modifier.height(14.dp))
+                PrimaryButton(if (state.searching) "正在搜…" else "搜索") {
+                    if (!state.searching) scope.launch { state.search() }
+                }
+            }
+
+            if (state.searchError.isNotBlank()) {
+                Spacer(Modifier.height(10.dp))
+                Text(state.searchError, fontSize = 12.sp, color = AxisColors.Danger)
+            }
+
+            SectionLabel("搜索结果")
+            state.results.forEach { candidate ->
+                CandidateRow(
+                    candidate = candidate,
+                    targetMs = state.durationMs,
+                    picking = state.pickingId.isNotEmpty() && state.pickingId == candidate.web?.id,
+                    nowPlaying = state.isNowPlaying(candidate),
+                ) {
+                    if (state.pickingId.isEmpty()) scope.launch { state.pickCandidate(candidate) }
+                }
+                Spacer(Modifier.height(10.dp))
+            }
+
+            // 可选升级：不拖慢搜索主流程，需要逐字时再点
+            if (state.title.isNotBlank()) {
+                Spacer(Modifier.height(6.dp))
+                GhostButton(if (state.upgrading) "正在查…" else "查逐字轴（在线逐字）", Modifier.fillMaxWidth()) {
+                    if (!state.upgrading) scope.launch { state.upgradeToWordSync() }
+                }
+                if (state.upgradeMsg.isNotBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(state.upgradeMsg, fontSize = 12.sp, color = AxisColors.TextSecondary)
+                }
+            }
+
+            // 断网 / 搜不到时的兜底：粘进来直接敲
+            SectionLabel("没网？把歌词粘进来")
+            AxisCard {
+                OutlinedTextField(
+                    value = state.pasted,
+                    onValueChange = { state.pasted = it },
+                    placeholder = { Text("一行一句，直接粘就行") },
+                    minLines = 4,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(10.dp))
+                PrimaryButton("用这份歌词开始") {
+                    if (!state.usePasted()) {
+                        Toast.makeText(context, "先把歌词粘进来", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun PasteScreen(state: AxisState) {
+    val context = LocalContext.current
+
+    AxisScreen(
+        title = "粘贴歌词",
+        subtitle = "一行一句；带 [00:12.34] 的时间也会读进来",
+        onBack = { state.route = Route.Home },
+        bottom = {
+            PrimaryButton("去核对") {
+                val imported = LocalLyricImport.parse(
+                    raw = state.pasted,
+                    fallbackTitle = state.title,
+                    fallbackArtist = state.artist,
+                    fallbackDurationMs = state.durationMs,
+                )
+                if (!state.loadImported(imported, "手动粘贴 · ${imported.lines.size} 句")) {
+                    Toast.makeText(context, "先把歌词粘进来", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    ) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
+        ) {
+            Spacer(Modifier.height(12.dp))
+            AxisCard {
+                Text(
+                    "这是哪首歌",
+                    fontSize = 12.sp,
+                    color = AxisColors.TextSecondary
+                )
+                Spacer(Modifier.height(10.dp))
+                Field("歌名", state.title) {
+                    state.title = it
+                    state.identityEdited = true
+                }
+                Spacer(Modifier.height(8.dp))
+                Field("歌手", state.artist) {
+                    state.artist = it
+                    state.identityEdited = true
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = if (state.durationMs > 0L) mmss(state.durationMs) else "",
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("时长（取自播放器）") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            AxisCard {
+                Text(
+                    "歌词",
+                    fontSize = 12.sp,
+                    color = AxisColors.TextSecondary
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = state.pasted,
+                    onValueChange = { state.pasted = it },
+                    placeholder = { Text("一行一句，直接粘进来") },
+                    minLines = 10,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "歌名 + 歌手 + 时长要跟正在播的这首对上，岛上才认这份轴。",
+                fontSize = 11.sp,
+                color = AxisColors.TextSecondary
+            )
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun Field(label: String, value: String, onChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onChange,
+        label = { Text(label) },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+@Composable
+private fun CandidateRow(
+    candidate: Candidate,
+    targetMs: Long,
+    picking: Boolean = false,
+    nowPlaying: Boolean = false,
+    onPick: () -> Unit,
+) {
+    AxisCard(onClick = onPick) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = "${candidate.title} — ${candidate.artist}",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = AxisColors.TextPrimary
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = buildString {
+                        append(candidate.album)
+                        append(" · ")
+                        append(candidate.durationLabel())
+                        if (candidate.lines.isNotEmpty()) {
+                            append(" · ")
+                            append(candidate.lines.size)
+                            append(" 句")
+                        }
+                    },
+                    fontSize = 11.sp,
+                    color = AxisColors.TextSecondary
+                )
+            }
+            when {
+                picking -> Tag("取词中")
+                nowPlaying -> Tag("正在播")
+                candidate.matches(targetMs) -> Tag("时长吻合")
+            }
+        }
+    }
+}
+
+@Composable
+private fun Tag(text: String, danger: Boolean = false) {
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (danger) AxisColors.DangerSoft else AxisColors.PrimarySoft)
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    ) {
+        Text(text, fontSize = 10.sp, color = if (danger) AxisColors.Danger else AxisColors.Primary)
+    }
+}
+
+@Composable
+private fun ReviewScreen(state: AxisState) {
+    AxisScreen(
+        title = "核对歌词",
+        subtitle = state.sourceLabel,
+        onBack = { state.back() },
+        bottom = {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                GhostButton("不对，换一个", Modifier.weight(1f)) { state.back() }
+                PrimaryButton("就用这份，开始打轴", Modifier.weight(1.4f)) {
+                    state.resetTiming()
+                    state.route = Route.Tap
+                }
+            }
+        }
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            // 顶部：歌名 / 歌手可改。识别错了在这里纠正，改完照样能命中
+            Column(Modifier.padding(horizontal = 16.dp)) {
+                AxisCard {
+                    Field("歌名", state.title) { state.updateIdentity(newTitle = it) }
+                    Spacer(Modifier.height(8.dp))
+                    Field("歌手", state.artist) { state.updateIdentity(newArtist = it) }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "以播放器为准 · 改了就以你为准，删括号、改错字照样能命中",
+                        fontSize = 11.sp,
+                        color = AxisColors.TextSecondary
+                    )
+                }
+                if (state.editingKey.isNotBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "编辑中：《${state.title}》 · ${state.artist} · 保存写回这一份",
+                        fontSize = 11.sp,
+                        color = AxisColors.Primary
+                    )
+                }
+                if (state.dropNotice.isNotBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(state.dropNotice, fontSize = 12.sp, color = AxisColors.Danger)
+                }
+                Spacer(Modifier.height(10.dp))
+            }
+            // 搜来的歌词顺序经常是乱的：先在这里排好再开始敲，比敲完再改省事
+            if (state.draft.size > 1) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        "顺序不对可 ↑↓ 逐行挪，或",
+                        fontSize = 11.sp,
+                        color = AxisColors.TextSecondary
+                    )
+                    GhostButton("按时间排序", Modifier.height(26.dp)) { state.sortByTime() }
+                }
+                Spacer(Modifier.height(4.dp))
+            }
+            LazyColumn(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                itemsIndexed(state.draft) { index, line ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(AxisColors.Card)
+                            .padding(start = 6.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(checked = line.keep, onCheckedChange = { line.keep = it })
+                        BasicTextField(
+                            value = line.text,
+                            onValueChange = { state.updateLineText(index, it) },
+                            modifier = Modifier.weight(1f),
+                            textStyle = TextStyle(
+                                fontSize = 14.sp,
+                                color = if (line.keep) AxisColors.TextPrimary else AxisColors.TextSecondary
+                            ),
+                            singleLine = true,
+                        )
+                        Text(
+                            text = "↑",
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { state.moveLine(index, -1) }
+                                .padding(horizontal = 5.dp, vertical = 4.dp),
+                            fontSize = 14.sp,
+                            color = AxisColors.TextSecondary
+                        )
+                        Text(
+                            text = "↓",
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { state.moveLine(index, 1) }
+                                .padding(horizontal = 5.dp, vertical = 4.dp),
+                            fontSize = 14.sp,
+                            color = AxisColors.TextSecondary
+                        )
+                        Text(
+                            text = "删",
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { state.removeLine(index) }
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            fontSize = 12.sp,
+                            color = AxisColors.TextSecondary
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TapScreen(state: AxisState) {
+    val context = LocalContext.current
+    // 想跟随但没跟上（会话还没绑上 / 刚切歌）时每 500ms 再试一次，别一失败就永远卡在独立计时
+    LaunchedEffect(Unit) {
+        while (true) {
+            if (state.followIntent && !state.following) state.startFollowing()
+            delay(500)
+        }
+    }
+    // 跟随时即使播放器暂停也要继续轮询，否则暂停后再播就接不回来
+    LaunchedEffect(state.following, state.playing) {
+        var lastSync = 0L
+        while (state.playing || state.following) {
+            val now = SystemClock.elapsedRealtime()
+            state.tick = now
+            if (state.following && now - lastSync >= 500L) {
+                state.syncFromPlayer()
+                lastSync = now
+            }
+            delay(100)
+        }
+    }
+    // 读一下 tick：它每 100ms 变一次，这页才会跟着时间重组。
+    // （之前只往 tick 里写、没人读，界面等于冻住，位置和进度条都不动）
+    val tickMs = state.tick
+    val pos = state.positionMs()
+
+    AxisScreen(
+        title = null,
+        onBack = { state.route = Route.Review },
+        bottom = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    GhostButton(if (state.playing) "暂停" else "播放", Modifier.width(58.dp)) {
+                        state.playPause()
+                    }
+                    GhostButton("-5s", Modifier.width(52.dp)) { state.jump(-5000L) }
+                    GhostButton("+5s", Modifier.width(52.dp)) { state.jump(5000L) }
+                    GhostButton("开头", Modifier.width(52.dp)) { state.jumpTo(0L) }
+                    GhostButton("撤销", Modifier.width(52.dp)) { state.undo() }
+                }
+                // 打开旧轴继续改时给一条退路：真要从头再敲，点这里把时间清空
+                if (state.keepAllRows) {
+                    GhostButton("清空时间，从头重敲", Modifier.fillMaxWidth()) {
+                        state.clearTimesForRewrite()
+                    }
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = if (state.following) "跟随中" else "点此跟随",
+                        fontSize = 11.sp,
+                        color = if (state.following) AxisColors.Primary else AxisColors.TextSecondary,
+                        modifier = Modifier.width(66.dp).clickable { state.startFollowing() }
+                    )
+                    PressButton(
+                        if (state.tapMode == TapMode.LINE) "敲行首" else "敲这个字",
+                        Modifier.weight(1f)
+                    ) { state.tap() }
+                }
+                // 出口：敲完能直接存，也能先校对
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    GhostButton("先校对", Modifier.weight(1f)) {
+                        state.route = Route.Proofread
+                    }
+                    PrimaryButton("完成保存", Modifier.weight(1f)) {
+                        state.saveTo(context)   // 失败时 saveTo 自己弹提示
+                    }
+                }
+            }
+        }
+    ) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+            Spacer(Modifier.height(12.dp))
+            AxisCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier
+                            .width(46.dp)
+                            .height(46.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(AxisColors.PrimarySoft)
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = state.title,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = AxisColors.TextPrimary
+                        )
+                        Text(state.artist, fontSize = 11.sp, color = AxisColors.TextSecondary)
+                    }
+                    Text(mmssCentis(pos), fontSize = 12.sp, color = AxisColors.TextSecondary)
+                }
+                Spacer(Modifier.height(12.dp))
+                // 进度条可拖：拖的时候跟手，松手就把歌真正跳到那个位置
+                var dragging by remember { mutableStateOf(false) }
+                var dragMs by remember { mutableStateOf(0f) }
+                Slider(
+                    value = if (dragging) dragMs else pos.toFloat(),
+                    onValueChange = { dragging = true; dragMs = it },
+                    onValueChangeFinished = {
+                        state.jumpTo(dragMs.toLong())
+                        dragging = false
+                    },
+                    valueRange = 0f..(state.durationMs.toFloat().coerceAtLeast(1f)),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("调值", fontSize = 11.sp, color = AxisColors.TextSecondary)
+                    GhostButton("−50", Modifier.height(28.dp)) {
+                        state.offsetMs = (state.offsetMs - 50).coerceIn(-1000, 1000)
+                    }
+                    Text(
+                        text = if (state.offsetMs == 0) "0ms" else "${state.offsetMs}ms",
+                        fontSize = 11.sp,
+                        color = AxisColors.TextSecondary
+                    )
+                    GhostButton("+50", Modifier.height(28.dp)) {
+                        state.offsetMs = (state.offsetMs + 50).coerceIn(-1000, 1000)
+                    }
+                    Text(
+                        text = "第 ${(state.cursorLine + 1).coerceAtMost(state.draft.size)} 句 · " +
+                            "${state.wordsDone.getOrNull(state.cursorLine)?.count { it != null } ?: 0}/" +
+                            "${state.wordsDone.getOrNull(state.cursorLine)?.size ?: 0} 字",
+                        fontSize = 11.sp,
+                        color = AxisColors.TextSecondary
+                    )
+                    Spacer(Modifier.weight(1f))
+                    GhostButton(
+                        if (state.tapMode == TapMode.CHAR) "逐字敲" else "快敲",
+                        Modifier.height(28.dp)
+                    ) {
+                        state.tapMode = if (state.tapMode == TapMode.CHAR) TapMode.LINE else TapMode.CHAR
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            // 只列勾选了要敲的行；未勾选的行不删数据，回核对页还能改
+            val keptIdx = state.draft.indices.filter { state.draft[it].keep }
+            val listState = rememberLazyListState()
+            // 敲到哪就跟着滚到哪，别让当前行掉到底部按钮后面看不见
+            LaunchedEffect(state.cursorLine, keptIdx.size) {
+                val pos = keptIdx.indexOf(state.cursorLine)
+                if (pos >= 0) listState.animateScrollToItem((pos - 1).coerceAtLeast(0))
+            }
+
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.weight(1f),
+                // 底部留出按钮区的高度，滚到最后一行也能完整露出来
+                contentPadding = PaddingValues(bottom = 96.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                if (keptIdx.isEmpty()) {
+                    item {
+                        Text(
+                            "没有勾选歌词，返回核对页勾选需要的句子",
+                            fontSize = 12.sp,
+                            color = AxisColors.TextSecondary,
+                            modifier = Modifier.padding(vertical = 24.dp)
+                        )
+                    }
+                }
+                items(keptIdx.size) { pos ->
+                    val index = keptIdx[pos]
+                    val line = state.draft[index]
+                    val begin = state.begins[index]
+                    val isCursor = index == state.cursorLine
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isCursor) AxisColors.PrimarySoft else Color.Transparent)
+                            .padding(horizontal = 8.dp, vertical = 11.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (isCursor) {
+                            Box(Modifier.width(3.dp).height(18.dp).background(AxisColors.Primary))
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        val words = remember(index, line.text) { AxisTokenizer.split(line.text) }
+                        val done = state.wordsDone.getOrNull(index)
+                        val charCursor = isCursor && state.tapMode == TapMode.CHAR
+                        Text(
+                            text = buildAnnotatedString {
+                                words.forEachIndexed { wi, w ->
+                                    val style = when {
+                                        charCursor && wi == state.cursorChar ->
+                                            SpanStyle(color = Color.White, background = AxisColors.Primary)
+                                        done?.getOrNull(wi) != null -> SpanStyle(color = AxisColors.Primary)
+                                        else -> SpanStyle(color = AxisColors.TextSecondary)
+                                    }
+                                    withStyle(style) { append(w) }
+                                }
+                            },
+                            fontSize = 15.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (isCursor) {
+                            Tag("待敲")
+                        } else if (begin != null) {
+                            Text(mmssCentis(begin), fontSize = 11.sp, color = AxisColors.TextSecondary)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProofreadScreen(state: AxisState) {
+    val context = LocalContext.current
+    val keptIdx = state.draft.indices.filter { state.draft[it].keep }
+    val filled = AxisValidator.fillMissing(state.begins.toList(), state.durationMs)
+    val texts = keptIdx.map { state.draft[it].text }
+    val starts = keptIdx.map { filled[it] }
+    val axisLines = AxisValidator.toAxisLines(texts, starts, state.durationMs)
+    val issues: List<AxisIssue> = AxisValidator.issues(axisLines, state.durationMs)
+    val issueIndexes = issues.map { it.index }.toSet()
+    // 点某一句就展开它的逐字表（再点收起）；记的是 draft 里的行号
+    var openLine by remember { mutableStateOf(-1) }
+
+    AxisScreen(
+        title = "校对",
+        subtitle = "共 ${axisLines.size} 句 · 异常 ${issues.size} 处",
+        onBack = { state.route = Route.Tap },
+        bottom = {
+            Column {
+                // 整首一起挪：行时间和逐字时间同时改，逐字不会因此错位
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    GhostButton("全曲 -1s", Modifier.weight(1f)) { state.shiftAll(-1000L) }
+                    GhostButton("全曲 -0.1s", Modifier.weight(1f)) { state.shiftAll(-100L) }
+                    GhostButton("全曲 +0.1s", Modifier.weight(1f)) { state.shiftAll(100L) }
+                    GhostButton("全曲 +1s", Modifier.weight(1f)) { state.shiftAll(1000L) }
+                }
+                Spacer(Modifier.height(10.dp))
+                PrimaryButton("完成并保存") {
+                    state.saveTo(context)   // 失败时 saveTo 自己弹提示
+                }
+            }
+        }
+    ) {
+        LazyColumn(
+            Modifier.fillMaxSize().padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            // 顺序整份乱了就别一句句挪：按时间码一次性排好
+            if (keptIdx.size > 1) {
+                item {
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+            text = "顺序不对可↑↓逐行挪，或",
+                            fontSize = 11.sp,
+                            color = AxisColors.TextSecondary
+                        )
+                        GhostButton("按时间排序", Modifier.height(26.dp)) { state.sortByTime() }
+                    }
+                }
+            }
+            itemsIndexed(axisLines) { index, line ->
+                val raw = keptIdx.getOrNull(index)
+                val prev = if (index > 0) axisLines[index - 1].beginMs else null
+                val delta = if (prev != null) line.beginMs - prev else null
+                val bad = index in issueIndexes
+                val open = raw != null && raw == openLine
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (bad) AxisColors.DangerSoft else AxisColors.Card)
+                ) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { openLine = if (open) -1 else (raw ?: -1) }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${index + 1}",
+                            fontSize = 12.sp,
+                            color = AxisColors.TextSecondary,
+                            modifier = Modifier.width(22.dp)
+                        )
+                        Text(
+                            text = line.text,
+                            fontSize = 14.sp,
+                            color = AxisColors.TextPrimary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(mmssCentis(line.beginMs), fontSize = 12.sp, color = AxisColors.TextPrimary)
+                            if (delta != null) {
+                                Text(
+                                    text = "Δ ${delta / 1000.0}s",
+                                    fontSize = 10.sp,
+                                    color = if (bad) AxisColors.Danger else AxisColors.TextSecondary
+                                )
+                            }
+                        }
+                        if (raw != null) {
+                            Column {
+                                GhostButton("↑", Modifier.width(30.dp).height(24.dp)) {
+                                    state.moveLine(raw, -1)
+                                }
+                                GhostButton("↓", Modifier.width(30.dp).height(24.dp)) {
+                                    state.moveLine(raw, 1)
+                                }
+                            }
+                        }
+                    }
+                    // 展开区：整句平移 + 逐字微调/删字
+                    if (open && raw != null) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text("本句", fontSize = 10.sp, color = AxisColors.TextSecondary)
+                            TinyButton("−100") { state.nudgeLine(raw, -100L) }
+                            TinyButton("−50") { state.nudgeLine(raw, -50L) }
+                            TinyButton("+50") { state.nudgeLine(raw, 50L) }
+                            TinyButton("+100") { state.nudgeLine(raw, 100L) }
+                        }
+                        val words = AxisTokenizer.split(state.draft.getOrNull(raw)?.text ?: line.text)
+                        val done = state.wordsDone.getOrNull(raw)
+                        words.forEachIndexed { wi, w ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "${wi + 1}",
+                                    fontSize = 10.sp,
+                                    color = AxisColors.TextSecondary,
+                                    modifier = Modifier.width(16.dp)
+                                )
+                                Text(
+                                    text = w,
+                                    fontSize = 13.sp,
+                                    color = AxisColors.TextPrimary,
+                                    modifier = Modifier.width(28.dp)
+                                )
+                                Text(
+                                    text = done?.getOrNull(wi)?.let { mmssCentis(it) } ?: "—",
+                                    fontSize = 11.sp,
+                                    color = AxisColors.TextSecondary,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TinyButton("−50") { state.nudgeWord(raw, wi, -50L) }
+                                TinyButton("+50") { state.nudgeWord(raw, wi, 50L) }
+                                TinyButton("删") { state.deleteWord(raw, wi) }
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SaveScreen(state: AxisState) {
+    val context = LocalContext.current
+    val axis = state.savedAxis
+    var importHint by remember { mutableStateOf("") }
+
+    val askExportOne = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            val ok = state.exportTo(context, uri)
+            importHint = if (ok) "已导出 ${state.title}-${state.artist}.axis.json" else "导出失败"
+        }
+    }
+    val askExportAll = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        if (uri != null) {
+            val ok = state.exportAllTo(context, uri)
+            importHint = if (ok) "已导出整库" else "整库导出失败（可能还没有任何轴）"
+        }
+    }
+    val askImport = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) importHint = state.importFrom(context, uri).label()
+    }
+    AxisScreen(title = null, onBack = { state.route = Route.Home }) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+        ) {
+            Spacer(Modifier.height(60.dp))
+            Box(
+                Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .width(54.dp)
+                    .height(54.dp)
+                    .clip(RoundedCornerShape(27.dp))
+                    .background(AxisColors.Success)
+            )
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = "轴已保存",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = AxisColors.TextPrimary,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = if (axis != null) "${axis.title} · ${axis.artist} · ${axis.lines.size} 句" else "没有保存内容",
+                fontSize = 12.sp,
+                color = AxisColors.TextSecondary,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
+            Spacer(Modifier.height(8.dp))
+            // 保存那一刻就已经通知状态栏重新读轴了，正常不用切歌
+            Text(
+                text = "已保存 · 点下面的按钮回桌面，抬眼就是岛上的新轴",
+                fontSize = 11.sp,
+                color = AxisColors.TextSecondary,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
+            Spacer(Modifier.height(24.dp))
+            AxisCard {
+                InfoRow("起始时间", axis?.lines?.firstOrNull()?.let { mmssCentis(it.beginMs) } ?: "-")
+                Spacer(Modifier.height(8.dp))
+                InfoRow("结束时间", axis?.lines?.lastOrNull()?.let { mmssCentis(it.endMs) } ?: "-")
+                Spacer(Modifier.height(8.dp))
+                InfoRow("命中歌曲", axis?.songKey ?: "-")
+            }
+            Spacer(Modifier.height(20.dp))
+            GhostButton("导出这一首（.axis.json）", Modifier.fillMaxWidth()) {
+                askExportOne.launch("${state.title}-${state.artist}.axis.json")
+            }
+            Spacer(Modifier.height(10.dp))
+            GhostButton("导出全部（zip）", Modifier.fillMaxWidth()) {
+                askExportAll.launch("axis-backup-${System.currentTimeMillis()}.zip")
+            }
+            Spacer(Modifier.height(10.dp))
+            GhostButton("导入轴文件", Modifier.fillMaxWidth()) {
+                askImport.launch(arrayOf("application/json", "application/zip", "application/octet-stream"))
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = importHint,
+                fontSize = 11.sp,
+                color = AxisColors.TextSecondary,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
+            Spacer(Modifier.height(10.dp))
+            GhostButton("导出 LRC 文件", Modifier.fillMaxWidth()) {
+                val path = state.exportLrc(context)
+                Toast.makeText(context, path ?: "先保存再导出", Toast.LENGTH_LONG).show()
+            }
+            Spacer(Modifier.height(10.dp))
+            PrimaryButton("回到岛上预览") {
+                // 保存时已经通知状态栏重读轴了，这里只要退出到桌面，抬眼就能看到新轴。
+                // 打轴器是嵌在主工程里的二级页，所以"预览"= 回桌面，不需要另开预览界面。
+                val activity = context.findActivity()
+                if (activity != null) {
+                    activity.moveTaskToBack(true)
+                } else {
+                    runCatching {
+                        context.startActivity(
+                            Intent(Intent.ACTION_MAIN)
+                                .addCategory(Intent.CATEGORY_HOME)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    }.onFailure {
+                        Toast.makeText(context, "退不回桌面，按 Home 键即可", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            Text(
+                text = "稍后再说",
+                fontSize = 13.sp,
+                color = AxisColors.TextSecondary,
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .clickable { state.route = Route.Home }
+            )
+            Spacer(Modifier.height(40.dp))
+        }
+    }
+}
+
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, fontSize = 12.sp, color = AxisColors.TextSecondary, modifier = Modifier.weight(1f))
+        Text(value, fontSize = 12.sp, color = AxisColors.TextPrimary)
+    }
+}
+
+/**
+ * Compose 里的 Context 常被包了几层（ContextThemeWrapper 之类），
+ * 直接 as Activity 会失手，沿 ContextWrapper 往上找才稳。
+ */
+private fun Context.findActivity(): Activity? {
+    var current: Context = this
+    while (current is ContextWrapper) {
+        if (current is Activity) return current
+        current = current.baseContext
+    }
+    return null
+}
