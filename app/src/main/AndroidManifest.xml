@@ -94,7 +94,7 @@
 
         <provider
             android:name=".live.LiveStateProvider"
-            android:authorities="com.liuxiansheng.chidao.live-state"
+            android:authorities="io.github.liuxiansheng12369.chidao.live-state"
             android:exported="true"
             android:enabled="true" />
 

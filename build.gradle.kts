@@ -20,9 +20,9 @@ val releaseNameRe = """extra\["appReleaseVersionName"\] = "(\d+)\.(\d+)\.(\d+)""
 val testPatchRe = """extra\["appTestPatch"\] = (\d+)""".toRegex()
 
 // ↓ 下面是版本号存档（打包脚本自己改写它们），不是本次构建生效值，别手改
-extra["appVersionCode"] = 2899
+extra["appVersionCode"] = 2901
 extra["appReleaseVersionName"] = "2.5.0"
-extra["appTestPatch"] = 2
+extra["appTestPatch"] = 3
 
 fun writeVersionToFile(code: Int, release: String, testPatch: Int) {
     var t = selfVersionFile.readText()
@@ -73,7 +73,7 @@ run {
         println("本次打包版本: $buildName (code $code)  [${if (isTest) "测试版" else "正式版"}]")
     }
 
-    extra["appPackageName"] = "com.liuxiansheng.chidao"
+    extra["appPackageName"] = "io.github.liuxiansheng12369.chidao"
     extra["appVersionCode"] = code
     extra["appReleaseVersionName"] = rel
     extra["appTestPatch"] = patch

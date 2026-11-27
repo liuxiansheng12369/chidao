@@ -58,7 +58,7 @@ import java.io.File
 object ManualAxisBridge {
 
     private const val TAG = "ManualAxis"
-    private const val AUTHORITY = "com.liuxiansheng.chidao.live-state"
+    private const val AUTHORITY = "io.github.liuxiansheng12369.chidao.live-state"
     private const val METHOD_LOOKUP = "axis_lookup"
 
     /** SystemUI 自己的轴副本目录（App 保存时推送过来）。读它不需要 App 活着。 */

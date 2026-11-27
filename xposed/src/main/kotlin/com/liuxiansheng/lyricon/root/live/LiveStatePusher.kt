@@ -29,7 +29,7 @@ import com.liuxiansheng.lyricon.xposed.systemui.util.CurrentMediaInfo
  */
 object LiveStatePusher {
     private const val TAG = "LiveStatePusher"
-    private const val AUTHORITY = "com.liuxiansheng.chidao.live-state"
+    private const val AUTHORITY = "io.github.liuxiansheng12369.chidao.live-state"
     private const val METHOD_PUBLISH = "publish_live"
 
     private const val KEY_TITLE = "title"

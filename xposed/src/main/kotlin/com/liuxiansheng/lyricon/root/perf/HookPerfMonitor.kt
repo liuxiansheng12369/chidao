@@ -32,7 +32,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object HookPerfMonitor {
 
-    private const val AUTHORITY = "com.liuxiansheng.chidao.live-state"
+    private const val AUTHORITY = "io.github.liuxiansheng12369.chidao.live-state"
     private const val METHOD_PUBLISH_PERF = "publish_perf"
     private const val KEY_ENABLED = "pref_debug_perf_monitor"
     private const val PUSH_INTERVAL_MS = 5_000L
