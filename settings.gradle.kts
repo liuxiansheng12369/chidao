@@ -1,12 +1,19 @@
 @file:Suppress("UnstableApiUsage")
 
+// CI（GitHub Actions）走官方源：阿里云镜像在海外 runner 上经常 502，导致 kotlin-build-tools-api 拉不到
 pluginManagement {
     repositories {
         mavenLocal()
-        maven { url = uri("https://maven.aliyun.com/repository/google") }
-        maven { url = uri("https://maven.aliyun.com/repository/central") }
-        maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
-        maven { url = uri("https://maven.aliyun.com/repository/public") }
+        if (System.getenv("CI") == "true") {
+            google()
+            mavenCentral()
+            gradlePluginPortal()
+        } else {
+            maven { url = uri("https://maven.aliyun.com/repository/google") }
+            maven { url = uri("https://maven.aliyun.com/repository/central") }
+            maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
+            maven { url = uri("https://maven.aliyun.com/repository/public") }
+        }
     }
 }
 
@@ -20,10 +27,15 @@ dependencyResolutionManagement {
         mavenLocal()
         // SuperLyricApi 只发布在 jitpack，阿里云镜像常年 401，直连官方源兜底
         maven { url = uri("https://jitpack.io") }
-        maven { url = uri("https://maven.aliyun.com/repository/jitpack") }
-        maven { url = uri("https://maven.aliyun.com/repository/google") }
-        maven { url = uri("https://maven.aliyun.com/repository/central") }
-        maven { url = uri("https://maven.aliyun.com/repository/public") }
+        if (System.getenv("CI") == "true") {
+            google()
+            mavenCentral()
+        } else {
+            maven { url = uri("https://maven.aliyun.com/repository/jitpack") }
+            maven { url = uri("https://maven.aliyun.com/repository/google") }
+            maven { url = uri("https://maven.aliyun.com/repository/central") }
+            maven { url = uri("https://maven.aliyun.com/repository/public") }
+        }
     }
 }
 
