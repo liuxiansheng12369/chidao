@@ -35,6 +35,8 @@ docs/备份/
 # ===== 公开仓库只放对外内容：内部开发文档与历史配图留在本机，不入库 =====
 /*.md
 !/README.md
+!/THIRD-PARTY-NOTICES.md
+!/更新日志.md
 /docs/*
 !/docs/LSPosed上架-提交说明.md
 !/docs/图标-512.png
@@ -43,6 +45,8 @@ docs/备份/
 # 任意层级的其它 .md（如 xposed/README-包结构.md）也不入库，只放行上面几份
 *.md
 !/README.md
+!/THIRD-PARTY-NOTICES.md
+!/更新日志.md
 !/.github/RELEASE_TEMPLATE.md
 !/docs/LSPosed上架-提交说明.md
 !/docs/状态栏歌词控制面板-词岛卡片.md

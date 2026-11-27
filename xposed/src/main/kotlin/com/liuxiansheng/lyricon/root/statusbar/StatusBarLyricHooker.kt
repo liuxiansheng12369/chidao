@@ -196,6 +196,13 @@ private var lastIslandContainersSignature: String? = null
     private var playingQueryAtMs = 0L
     private var playingQueryValue = false
 
+    /**
+     * 位置推进的"停摆判定"窗口：超过这个时长既没有新位置、媒体会话也不是播放态，才判暂停。
+     * 位置推送实测 3 秒一档（最长见过 6.9 秒），原来卡 1.5 秒会把正常播放判成暂停，
+     * 歌词跟着一闪一没；放宽到 4 秒，并且以媒体会话真实播放态为主判据。
+     */
+    private val PLAYING_IDLE_TIMEOUT_MS = 4000L
+
     // 播放期间的绘制节流：两次真正绘制之间至少隔 16ms（60Hz）
     private val FRAME_MIN_INTERVAL_MS = 16L
     private var lastDrawFrameMs = 0L
@@ -311,12 +318,15 @@ private var lastIslandContainersSignature: String? = null
             if (view.visibility != if (shouldShow) android.view.View.VISIBLE else android.view.View.GONE) {
                 view.visibility = if (shouldShow) android.view.View.VISIBLE else android.view.View.GONE
             }
-            // 4) 播放检测：位置推进 → 播放中
+            // 4) 播放检测：媒体会话真实播放态为主，位置推进只做兜底
             val now = SystemClock.elapsedRealtime()
-            if (pos > lastPos && now - lastPosTime < 1500) {
-                if (!isPlaying) invalidatePlayingCache()
-                isPlaying = true
-            } else if (now - lastPosTime > 1500) {
+            val mediaPlayingNow = stablePlaying()
+            if (mediaPlayingNow || (pos > lastPos && now - lastPosTime < PLAYING_IDLE_TIMEOUT_MS)) {
+                if (!isPlaying) {
+                    isPlaying = true
+                    invalidatePlayingCache()
+                }
+            } else if (now - lastPosTime > PLAYING_IDLE_TIMEOUT_MS) {
                 if (isPlaying) {
                     isPlaying = false
                     invalidatePlayingCache()
