@@ -636,7 +636,7 @@ private fun ModuleCard(
                                     key = MasterPrefs.KEY_LYRIC_SOURCE_KEEP_SESSION_ON_PAUSE,
                                     default = false,
                                     title = "暂停防冻结",
-                                    summary = "音乐暂停时保持播放会话活跃，避免被系统冻结导致重启状态栏后歌词数据不通",
+                                    summary = "暂停时保持播放会话，避免被系统冻结",
                                     bridge = ProviderPrefsBridge,
                                 )
                                 NumberInputPreference(

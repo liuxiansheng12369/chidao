@@ -49,6 +49,9 @@
             android:name="xposedmodule"
             android:value="true" />
         <meta-data
+            android:name="xposeddescription"
+            android:value="@string/xposed_module_description" />
+        <meta-data
             android:name="xposedscope"
             android:resource="@array/module_scope" />
 

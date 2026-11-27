@@ -28,6 +28,10 @@ import com.liuxiansheng.lyricon.hyper.root.utils.HookLogger
 import com.liuxiansheng.lyricon.hyper.lyric.model.interfaces.IRichLyricLine
 import com.liuxiansheng.lyricon.hyper.lyric.model.lyricMetadataOf
 import com.liuxiansheng.lyricon.lyric.render.model.LyricRenderModel
+import com.liuxiansheng.lyricon.lyric.render.yoyo.AnimSpeed
+import com.liuxiansheng.lyricon.lyric.render.yoyo.YoYoPresetCatalog
+import com.liuxiansheng.lyricon.lyric.render.yoyo.YoYoPresets
+import com.daimajia.androidanimations.library.YoYo
 
 /** 可以被外部整行换色的视图。 */
 internal interface UpdatableColor {
@@ -294,7 +298,44 @@ internal open class RichLyricLineView(
             ANIM_ELASTIC -> playElasticScale()
             ANIM_FLIP_X -> playFlipHorizontalAxis()
             ANIM_BLUR_FADE -> playBlurFade()
-            else -> Unit
+            else -> if (lineSwitchAnimation >= YoYoPresetCatalog.BASE) {
+                playYoYoPreset(lineSwitchAnimation)
+            }
+        }
+    }
+
+    /**
+     * YoYo 预设（移植上游 yoyo 包）：词岛换句是双行布局，换行瞬间新句已经在主行，
+     * 内容不用再换，所以只跑预设里的「入场」那一半（上游是单行原地换内容，先出场再入场）。
+     */
+    private fun playYoYoPreset(value: Int) {
+        val id = YoYoPresetCatalog.idForValue(value) ?: return
+        val preset = YoYoPresets.getById(id, AnimSpeed.Normal) ?: return
+        val cfg = preset.second
+
+        main.pivotX = main.width / 2f
+        main.pivotY = main.height / 2f
+        // 起始透明度交给预设自己（个别预设不带 alpha，不能在这里统一置 0，否则那几种会整行看不见）
+        runCatching {
+            YoYo.with(cfg.technique)
+                .duration(cfg.duration)
+                .interpolate(cfg.interpolator)
+                .withListener(object : android.animation.Animator.AnimatorListener {
+                    override fun onAnimationStart(a: android.animation.Animator) {}
+                    override fun onAnimationRepeat(a: android.animation.Animator) {}
+                    override fun onAnimationCancel(a: android.animation.Animator) {
+                        resetOne(main)
+                    }
+
+                    override fun onAnimationEnd(a: android.animation.Animator) {
+                        resetOne(main)
+                    }
+                })
+                .playOn(main)
+        }.onFailure {
+            // 任何一段动画失败都不能让新句停在透明态
+            resetOne(main)
+            HookLogger.w("RichLyricLineView", "YoYo 入场动画失败 id=$id: ${it.message}")
         }
     }
 
@@ -736,7 +777,11 @@ internal open class RichLyricLineView(
             mirror = style.mirror,
             lyricEffect = style.lyricEffect,
             effectSolidColor = style.effectSolidColor,
-            emphasisGlow = style.emphasisGlow
+            emphasisGlow = style.emphasisGlow,
+            marqueePacePxPerSec = style.marqueePacePxPerSec,
+            marqueeStartDelayMs = style.marqueeStartDelayMs,
+            marqueeLoopDelayMs = style.marqueeLoopDelayMs,
+            marqueeSpacingPx = style.marqueeSpacingPx
         )
         applyLineStyle(
             view = secondary,
@@ -750,7 +795,11 @@ internal open class RichLyricLineView(
             mirror = false,
             lyricEffect = style.lyricEffect,
             effectSolidColor = style.effectSolidColor,
-            emphasisGlow = style.emphasisGlow
+            emphasisGlow = style.emphasisGlow,
+            marqueePacePxPerSec = style.marqueePacePxPerSec,
+            marqueeStartDelayMs = style.marqueeStartDelayMs,
+            marqueeLoopDelayMs = style.marqueeLoopDelayMs,
+            marqueeSpacingPx = style.marqueeSpacingPx
         )
         // 歌词左右两端的时间：左端贴左、右端贴右，不居中
         applyLineStyle(
@@ -764,7 +813,11 @@ internal open class RichLyricLineView(
             mirror = false,
             lyricEffect = style.lyricEffect,
             effectSolidColor = style.effectSolidColor,
-            emphasisGlow = style.emphasisGlow
+            emphasisGlow = style.emphasisGlow,
+            marqueePacePxPerSec = style.marqueePacePxPerSec,
+            marqueeStartDelayMs = style.marqueeStartDelayMs,
+            marqueeLoopDelayMs = style.marqueeLoopDelayMs,
+            marqueeSpacingPx = style.marqueeSpacingPx
         )
         applyLineStyle(
             view = rightEndTime,
@@ -777,7 +830,11 @@ internal open class RichLyricLineView(
             mirror = false,
             lyricEffect = style.lyricEffect,
             effectSolidColor = style.effectSolidColor,
-            emphasisGlow = style.emphasisGlow
+            emphasisGlow = style.emphasisGlow,
+            marqueePacePxPerSec = style.marqueePacePxPerSec,
+            marqueeStartDelayMs = style.marqueeStartDelayMs,
+            marqueeLoopDelayMs = style.marqueeLoopDelayMs,
+            marqueeSpacingPx = style.marqueeSpacingPx
         )
 
         refreshLines()
@@ -795,11 +852,18 @@ internal open class RichLyricLineView(
         mirror: Boolean,
         lyricEffect: Int,
         effectSolidColor: Int,
-        emphasisGlow: Boolean
+        emphasisGlow: Boolean,
+        marqueePacePxPerSec: Float = 120f,
+        marqueeStartDelayMs: Int = 400,
+        marqueeLoopDelayMs: Long = 800,
+        marqueeSpacingPx: Float = 70f
     ) {
         // 单色必须在 configureWith 之前设，configureWith 会用它重建特效调色板
         view.effectSolidColor = effectSolidColor
-        view.configureWith(text, highlight, gradient, centerIfPossible, rightIfPossible, wordMotion)
+        view.configureWith(
+            text, highlight, gradient, centerIfPossible, rightIfPossible, wordMotion,
+            marqueePacePxPerSec, marqueeStartDelayMs, marqueeLoopDelayMs, marqueeSpacingPx
+        )
         view.mirrorEnabled = mirror
         view.emphasisGlow = emphasisGlow
         view.lyricEffectMode = lyricEffect

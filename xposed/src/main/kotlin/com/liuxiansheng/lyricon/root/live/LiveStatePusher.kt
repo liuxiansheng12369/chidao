@@ -98,6 +98,25 @@ object LiveStatePusher {
         "com.huawei.music",                      // 华为音乐（系统）
         "com.qianqian.music",                    // 千千音乐
         "com.leguandev.sollin.v2",               // Sollin（Flutter 聚合播放器）
+        // —— 商店歌词源已经覆盖、但之前漏记的播放器（包名取自各源模块的 scope/常量）——
+        "com.hihonor.cloudmusic",                // 荣耀云音乐（网易云源同源支持）
+        "com.hihonor.music",                     // 荣耀音乐（ROM 播放器）
+        "com.xiaomi.music",                      // 小米音乐（新版包名）
+        "com.tencent.qqmusicpad",                // QQ 音乐 HD
+        "com.tencent.freemusic",                 // QQ 音乐简洁版
+        "com.maxmpz.audioplayer",                // Poweramp
+        "ink.trantor.coneplayer",                // ConePlayer
+        "ink.trantor.coneplayer.gp",             // ConePlayer GP
+        "ink.trantor.coneplayer.go",             // ConePlayer Go
+        "app.symfonik.music.player",             // Symfonium
+        "org.akanework.gramophone",              // Gramophone
+        "code.name.monkey.retromusic",           // Retro Music
+        "top.imsyy.splayer.android",             // SPlayer
+        "com.trim.music",                        // 飞牛音乐
+        "com.meizu.media.music",                 // 魅族音乐
+        "com.lxwalnut.music.mobile",             // 洛雪音乐（Walnut 分支）
+        "com.ikunshare.music.mobile",            // 洛雪音乐（IKUN 分支）
+        "com.lxnetease.music.mobile",            // 洛雪音乐（网易分支）
     )
 
     private val uri: Uri = Uri.parse("content://$AUTHORITY")

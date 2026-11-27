@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import com.liuxiansheng.lyricon.app.util.HubPresetClient
 import com.liuxiansheng.lyricon.app.util.MasterPrefs
 import com.liuxiansheng.lyricon.app.util.StatusBarPrefs
+import com.liuxiansheng.lyricon.app.util.YoYoAnimOptions
 // 凝光视效：合并类弹窗（偏移/左右内容）在凝光皮肤下换成带系统模糊的 COUI 弹窗
 import com.liuxiansheng.lyricon.app.coui.CouiUiState
 import com.liuxiansheng.lyricon.app.coui.CouiSlotDialog
@@ -72,7 +73,7 @@ fun SuperIslandSection(context: Context, reorder: SectionReorder? = null) {
             key = MasterPrefs.KEY_ENABLE_SUPER_ISLAND,
             default = true,
             title = "启用超级岛歌词",
-            summary = "在小米灵动岛内显示歌词，切换后需重启系统界面生效",
+            summary = "在灵动岛显示歌词，切换需重启系统界面",
             extraWrite = {
                 // 互拆（双向）：超级岛开关与状态栏歌词开关永远相反
                 StatusBarPrefs.setBoolean(
@@ -85,6 +86,7 @@ fun SuperIslandSection(context: Context, reorder: SectionReorder? = null) {
 
         // 歌词应用过滤：按包名决定哪些应用能在岛上出歌词（模式 + 白/黑名单）
         IslandLyricAppFilterRows(context)
+
     }
 }
 
@@ -203,8 +205,8 @@ fun BasicSettingsSection(context: Context, reorder: SectionReorder? = null) {
             key = MasterPrefs.KEY_ISLAND_DYNAMIC_WIDTH_BASIS,
             default = 0,
             options = listOf(
-                ("全部内容" to "按岛内全部内容计算动态宽度"),
-                ("仅歌词" to "只按歌词文本计算动态宽度")
+                ("全部内容" to "按全部内容算宽"),
+                ("仅歌词" to "只按歌词算宽")
             ),
             title = "动态宽度基准",
             summary = "动态宽度收缩时以什么为基准"
@@ -230,7 +232,7 @@ fun BasicSettingsSection(context: Context, reorder: SectionReorder? = null) {
             key = MasterPrefs.KEY_ISLAND_ENABLE_DYNAMIC_SHRINK,
             default = true,
             title = "动态宽度收缩",
-            summary = "开启后岛宽随歌词长度实时变化，关闭后固定宽度",
+            summary = "岛宽随歌词长度变化",
             extraWrite = { value ->
                 MasterPrefs.setInt(context, MasterPrefs.KEY_ISLAND_WIDTH_MODE, if (value) 1 else 0)
             }
@@ -242,7 +244,7 @@ fun BasicSettingsSection(context: Context, reorder: SectionReorder? = null) {
             key = MasterPrefs.KEY_ISLAND_DISABLE_WIDTH_LIMIT,
             default = false,
             title = "解除宽度限制",
-            summary = "开启后单侧歌词容器最大 148dp；关闭时系统限制 92dp"
+            summary = "单侧最大 148dp，关闭时 92dp"
         )
 
         // 动态最大宽度
@@ -271,7 +273,7 @@ fun BasicSettingsSection(context: Context, reorder: SectionReorder? = null) {
             key = MasterPrefs.KEY_ISLAND_SPECTRUM_LINK_WIDTH,
             default = true,
             title = "频谱封面隐藏",
-            summary = "开启后始终隐藏封面和频谱，只显示歌词；关闭后正常显示"
+            summary = "只显示歌词，隐藏封面与频谱"
         )
 
         // 文字大小（默认 12sp）
@@ -291,20 +293,20 @@ fun BasicSettingsSection(context: Context, reorder: SectionReorder? = null) {
             key = MasterPrefs.KEY_PLACEHOLDER_FORMAT,
             default = 2,
             options = listOf(
-                "关闭" to "歌词出现前不显示任何占位",
+                "关闭" to "开播前不占位",
                 "歌名-歌手" to "显示 歌名 - 歌手",
                 "歌名" to "只显示歌名"
             ),
             values = listOf(0, 1, 2),
             title = "歌词未到时显示",
-            summary = "歌词出现前，岛上显示歌名，让人知道功能已生效"
+            summary = "开播时先显示歌名"
         )
 
         // 歌词/容器偏移（合并左/右歌词偏移 + 左/右容器间距为一个弹窗项，交互同自定义颜色）
         var showOffsetDialog by remember { mutableStateOf(false) }
         PrefArrow(
             title = "歌词/容器偏移",
-            summary = "统一调整左/右歌词偏移与容器间距（弹窗内直接改）",
+            summary = "左/右偏移与容器间距",
             onClick = { showOffsetDialog = true }
         )
         if (showOffsetDialog) {
@@ -557,9 +559,9 @@ fun LyricEffectSection(context: Context, reorder: SectionReorder? = null) {
                 ("聚光灯" to "聚光灯移动照亮文字"),
                 ("镜像倒影" to "下方镜像倒影"),
                 ("激光扫描" to "激光线扫描揭示文字"),
-                ("粒子聚合" to "粒子飞向文字聚合再散开"),
+                ("粒子聚合" to "粒子聚拢再散开"),
                 ("故障艺术" to "RGB色差错位+扫描线"),
-                ("手写效果" to "从左到右逐渐显露+抖动"),
+                ("手写效果" to "逐字显露+抖动"),
                 ("波形背景" to "音频波形竖条背景"),
                 ("星星散落" to "周围星星粒子闪烁"),
                 ("旋转出现" to "旋转缩放出现停留消失"),
@@ -571,7 +573,7 @@ fun LyricEffectSection(context: Context, reorder: SectionReorder? = null) {
                 17, 18, 19, 20, 22, 23, 24, 25
             ),
             title = "歌词动画效果",
-            summary = "歌词显示时的持续动画效果（选静态/无则正常逐字渲染）"
+            summary = "歌词持续动画，选静态则正常渲染"
         )
 
         // 逐词强调：从「歌词动画效果」下拉里拆出来的独立开关
@@ -580,7 +582,7 @@ fun LyricEffectSection(context: Context, reorder: SectionReorder? = null) {
             key = MasterPrefs.KEY_ISLAND_LYRIC_EMPHASIS,
             default = false,
             title = "逐词强调",
-            summary = "唱到的词放大、左右展开并上浮，按歌词自身颜色发光（开启后优先于上面的动画效果）"
+            summary = "唱到的词放大发光，优先于上面效果"
         )
 
         // 歌词镜像倒影
@@ -589,7 +591,7 @@ fun LyricEffectSection(context: Context, reorder: SectionReorder? = null) {
             key = MasterPrefs.KEY_ISLAND_LYRIC_MIRROR,
             default = false,
             title = "歌词镜像倒影",
-            summary = "歌词下方显示半透明倒影（有翻译或预显示下一句时自动不显示）"
+            summary = "歌词下方半透明倒影"
         )
 
         // 换句动画（原在「歌词内容 → 下一句歌词」，3.0.1108 移到动画分组一起管）
@@ -598,21 +600,22 @@ fun LyricEffectSection(context: Context, reorder: SectionReorder? = null) {
             key = MasterPrefs.KEY_LINE_SWITCH_ANIM,
             default = 1,
             options = listOf(
-                ("无动画" to "原始切换，无过渡效果"),
-                ("副行放大" to "副行放大并移到主行位置"),
-                ("淡入淡出" to "主行淡出、副行原地淡入"),
-                ("上滑" to "主行上移淡出、副行自下滑入"),
-                ("下滑" to "主行下移淡出、副行自上滑入"),
-                ("缩放淡入" to "主行缩小淡出、副行放大淡入"),
-                ("3D 翻转" to "沿纵轴翻出翻入"),
-                ("左滑" to "主行左滑淡出、副行右侧滑入"),
-                ("右滑" to "主行右滑淡出、副行左侧滑入"),
-                ("弹性放大" to "副行带过冲弹性放大入场"),
-                ("竖向翻转" to "沿横轴上下翻出翻入"),
-                ("模糊淡入" to "主行糊掉、副行由糊变清晰（Android 12+）"),
-            ),
+                ("无动画" to "无过渡"),
+                ("副行放大" to "副行升主行"),
+                ("淡入淡出" to "主淡出·副淡入"),
+                ("上滑" to "主上移·副下入"),
+                ("下滑" to "主下移·副上入"),
+                ("缩放淡入" to "主缩出·副放入"),
+                ("3D 翻转" to "纵轴翻转"),
+                ("左滑" to "主左出·副右入"),
+                ("右滑" to "主右出·副左入"),
+                ("弹性放大" to "副行弹入"),
+                ("竖向翻转" to "横轴翻转"),
+                ("模糊淡入" to "主糊·副渐清"),
+            ) + YoYoAnimOptions.options,
+            values = (0..11).toList() + YoYoAnimOptions.values,
             title = "换句动画",
-            summary = "换句时副行预览/翻译提升为主行的过渡动画（12 种，与状态栏各自独立）"
+            summary = "换句时新句的入场过渡"
         )
 
         // 逐字往上跳（逐字动效：每个字随播放进度依次向上跳动）
@@ -682,7 +685,7 @@ fun DisplaySection(context: Context, reorder: SectionReorder? = null) {
                 ("默认" to "使用默认文字颜色"),
                 ("封面取色" to "从封面提取主色"),
                 ("封面渐变" to "封面渐变色彩"),
-                ("彩虹" to "歌词呈 16 色逐字渐变"),
+                ("彩虹" to "16 色逐字渐变"),
                 ("自定义颜色" to "使用自定义歌词颜色")
             ),
             values = listOf(0, 1, 2, 4, 5),
@@ -781,7 +784,7 @@ fun SpecialEffectsSection(context: Context, reorder: SectionReorder? = null) {
             key = MasterPrefs.KEY_ISLAND_PROGRESS_BAR_TRACK_ENABLED,
             default = true,
             title = "底圈",
-            summary = "显示进度条底部的完整轨道圈（关闭后只画进度弧）",
+            summary = "显示完整的轨道圈",
             extraWrite = { value ->
                 MasterPrefs.setBoolean(context, MasterPrefs.KEY_HOOK_ISLAND_PROGRESS_TRACK, value)
             }
@@ -793,7 +796,7 @@ fun SpecialEffectsSection(context: Context, reorder: SectionReorder? = null) {
             key = MasterPrefs.KEY_ISLAND_RING_GLOW_ENABLED,
             default = false,
             title = "环绕光圈",
-            summary = "沿岛一圈描亮，跟着音量呼吸，鼓点整圈闪一下",
+            summary = "随音量呼吸，鼓点闪一下",
             extraWrite = { value ->
                 MasterPrefs.setBoolean(context, MasterPrefs.KEY_HOOK_ISLAND_RING_GLOW, value)
             }
@@ -811,10 +814,10 @@ fun SpecialEffectsSection(context: Context, reorder: SectionReorder? = null) {
             key = MasterPrefs.KEY_ISLAND_RING_GLOW_MODE,
             default = 1,
             options = listOf(
-                ("跟随封面" to "光圈取当前专辑封面的主色，换歌跟着换"),
-                ("彩虹" to "沿岛一圈铺 16 色环，色带慢慢绕岛流动"),
-                ("固定色" to "用 16 色预设里的某一个颜色"),
-                ("自定义色" to "自己填 #RRGGBB，想调多细都行")
+                ("跟随封面" to "取封面主色，随歌变"),
+                ("彩虹" to "16 色环绕岛流动"),
+                ("固定色" to "用预设里的固定色"),
+                ("自定义色" to "自填 #RRGGBB")
             ),
             values = listOf(0, 3, 1, 2), // 跟随封面 / 彩虹 / 固定色 / 自定义色
             title = "光圈颜色",
@@ -853,7 +856,7 @@ fun SpecialEffectsSection(context: Context, reorder: SectionReorder? = null) {
             val curName = presetList.firstOrNull { it.first == curColor }?.second ?: "#%06X".format(curColor and 0xFFFFFF)
             ArrowPreference(
                 title = "预设颜色",
-                summary = "16 色任选，点开即换（当前 $curName）",
+                summary = "16 色任选（当前 $curName）",
                 onClick = { ringColorDialog = 1 }
             )
             ArrowPreference(
@@ -886,7 +889,7 @@ fun SpecialEffectsSection(context: Context, reorder: SectionReorder? = null) {
                         0xFF8CCDFF.toInt() to "冷蓝"
                     )
                 },
-                summary = "16 色：点色块即可，选中后光圈固定用这个颜色",
+                summary = "16 色，选中即固定此色",
                 onSelected = { color ->
                     MasterPrefs.setInt(context, MasterPrefs.KEY_ISLAND_RING_GLOW_COLOR, color)
                     MasterPrefs.setInt(context, MasterPrefs.KEY_HOOK_ISLAND_RING_GLOW_COLOR, color)
@@ -906,7 +909,7 @@ fun SpecialEffectsSection(context: Context, reorder: SectionReorder? = null) {
                 presetColors = emptyList(),
                 allowCustomHex = true,
                 initialHexColor = customHex,
-                summary = "直接填 HEX，例如 #9FD0FF 或 #FF8800",
+                summary = "HEX 例 #9FD0FF",
                 onSelected = { color ->
                     customHex = color
                     MasterPrefs.setInt(context, MasterPrefs.KEY_ISLAND_RING_GLOW_CUSTOM_COLOR, color)
@@ -925,7 +928,7 @@ fun SpecialEffectsSection(context: Context, reorder: SectionReorder? = null) {
             key = MasterPrefs.KEY_ISLAND_PARTICLE_MOTION_ENABLED,
             default = false,
             title = "环绕粒子律动",
-            summary = "在光圈基础上一圈向外喷淡光粒子，音量越大喷得越多",
+            summary = "音量越大喷得越多",
             extraWrite = { value ->
                 MasterPrefs.setBoolean(context, MasterPrefs.KEY_HOOK_ISLAND_PARTICLE_MOTION, value)
             }
@@ -939,7 +942,7 @@ fun SpecialEffectsSection(context: Context, reorder: SectionReorder? = null) {
         }
         PrefChoiceRow(
             title = "进度条颜色",
-            summary = "彩虹渐变按彩虹色走；跟随封面取当前专辑封面主色",
+            summary = "彩虹色 / 封面主色",
             options = listOf("彩虹渐变", "跟随封面"),
             selectedIndex = colorMode,
             onSelectedIndexChange = { i ->
@@ -955,10 +958,10 @@ fun SpecialEffectsSection(context: Context, reorder: SectionReorder? = null) {
             key = MasterPrefs.KEY_ISLAND_PROGRESS_BAR_STYLE,
             default = 0,
             options = listOf(
-                ("起点·上" to "进度条从上侧起点顺时针推进"),
-                ("起点·右" to "进度条从右侧起点顺时针推进"),
-                ("起点·下" to "进度条从下侧起点顺时针推进"),
-                ("起点·左" to "进度条从左侧起点顺时针推进")
+                ("起点·上" to "上侧起点顺时针"),
+                ("起点·右" to "右侧起点顺时针"),
+                ("起点·下" to "下侧起点顺时针"),
+                ("起点·左" to "左侧起点顺时针")
             ),
             title = "进度条起点",
             summary = "选择进度条环绕的起始位置",
@@ -973,7 +976,7 @@ fun SpecialEffectsSection(context: Context, reorder: SectionReorder? = null) {
             key = MasterPrefs.KEY_ISLAND_OUTER_GLOW_ENABLED,
             default = false,
             title = "超级光效",
-            summary = "岛外围光晕发光效果，颜色跟随封面或使用固定色",
+            summary = "光晕颜色跟封面或固定色",
             extraWrite = { value ->
                 MasterPrefs.setBoolean(context, MasterPrefs.KEY_HOOK_ISLAND_OUTER_GLOW_ENABLED, value)
             }
@@ -996,8 +999,8 @@ fun SpecialEffectsSection(context: Context, reorder: SectionReorder? = null) {
             key = MasterPrefs.KEY_ISLAND_OUTER_GLOW_OUTER_MODE,
             default = 0,
             options = listOf(
-                ("跟随封面" to "光效颜色跟随专辑封面主色"),
-                ("固定色" to "光效使用下方选择的固定颜色")
+                ("跟随封面" to "取封面主色"),
+                ("固定色" to "用下方固定色")
             ),
             title = "光效颜色模式",
             summary = "光效颜色来源：跟随封面主色或使用固定色",
@@ -1096,7 +1099,7 @@ fun IslandBackgroundSection(context: Context, reorder: SectionReorder? = null) {
             key = MasterPrefs.KEY_ISLAND_MATERIAL_ENABLED,
             default = false,
             title = "毛玻璃",
-            summary = "试验性功能，默认关闭、可能不稳定。用 HyperOS 系统实时模糊（高斯/玻璃材质）替换岛背景，开时关闭透明/磨砂/柔光/封面",
+            summary = "试验性，默认关；开启后替换岛背景",
             confirmOnEnable = SwitchConfirmSpec(
                 title = "开启试验性功能？",
                 message = "岛背景 / 毛玻璃属于试验性功能，可能不正常：岛内容可能突然消失、玻璃可能不显示、" +
@@ -1137,7 +1140,7 @@ fun IslandBackgroundSection(context: Context, reorder: SectionReorder? = null) {
             key = "pref_soft_glass_scene_dim_enabled",
             default = false,
             title = "白底自动压暗",
-            summary = "白底（亮背景）时把柔光压暗，避免整岛发白；暗背景不受影响。毛玻璃总开关关闭时不生效"
+            summary = "亮背景时压暗柔光"
         )
 
         // 材质类型
@@ -1146,13 +1149,13 @@ fun IslandBackgroundSection(context: Context, reorder: SectionReorder? = null) {
             key = MasterPrefs.KEY_ISLAND_MATERIAL_TYPE,
             default = 0,
             options = listOf(
-                "高斯模糊" to "经典系统磨砂玻璃（实时模糊+圆角裁剪）",
+                "高斯模糊" to "系统实时模糊",
                 "高光玻璃" to "玻璃高光反射",
                 "液态玻璃" to "液态折射效果",
                 "柔光玻璃" to "柔和雾面透光"
             ),
             title = "材质类型",
-            summary = "毛玻璃的材质样式（四种实时生效；总开关未开启时选择不生效）",
+            summary = "四种材质，实时生效",
             guard = { MasterPrefs.isMaterialMasterOn(context) },
             onGuarded = {
                 Toast.makeText(context, "「毛玻璃」总开关未开启，材质设置不生效", Toast.LENGTH_SHORT).show()
@@ -1196,7 +1199,7 @@ fun IslandBackgroundSection(context: Context, reorder: SectionReorder? = null) {
         var selectedSections by remember { mutableStateOf(setOf<String>()) }
         PrefArrow(
             title = "下载岛背景预设",
-            summary = "预设卡片列表，勾选要应用的配置项后应用（词岛不支持的自动跳过；毛玻璃总开关未开启时写入无效）",
+            summary = "勾选要应用的配置项后应用",
             onClick = click@{
                 if (hubLoading || hubDetailLoading) return@click
                 if (!MasterPrefs.isMaterialMasterOn(context)) {
@@ -1370,7 +1373,7 @@ fun IslandBackgroundSection(context: Context, reorder: SectionReorder? = null) {
             key = MasterPrefs.KEY_ISLAND_TRANSPARENT_BIG_ENABLED,
             default = false,
             title = "透明",
-            summary = "展开大卡片和收起小胶囊背景都透明（去掉黑色背景透出桌面）",
+            summary = "大卡与胶囊背景都透明",
             extraWrite = { value ->
                 MasterPrefs.setBoolean(context, MasterPrefs.KEY_ISLAND_TRANSPARENT_ENABLED, value)
                 // ★ 1.3.102：透明同样要重启状态栏才认（实测来回切当场无效），切换时提示一次。
@@ -1394,11 +1397,11 @@ fun LyricContentSection(context: Context, reorder: SectionReorder? = null) {
             key = MasterPrefs.KEY_MANUAL_AXIS_PRIORITY,
             default = 1,
             options = listOf(
-                "人工轴优先" to "敲过轴的歌一律显示人工轴，排在在线歌词前面",
-                "在线歌词优先" to "有在线歌词就用在线歌词，没有时才用人工轴"
+                "人工轴优先" to "敲过轴的歌先用人工轴",
+                "在线歌词优先" to "有在线歌词就用在线歌词"
             ),
             title = "人工轴优先级",
-            summary = "播放器自带的歌词在这两种情况下都排最后"
+            summary = "播放器自带歌词排最后"
         )
 
         // ===== 文本与过滤（1.3.55 新增：先加工文本，再决定显示什么）=====
@@ -1409,12 +1412,12 @@ fun LyricContentSection(context: Context, reorder: SectionReorder? = null) {
                 key = MasterPrefs.KEY_HOOK_CHINESE_CONVERSION_MODE,
                 default = 0,
                 options = listOf(
-                    "关闭" to "按歌词原来的字形显示，不做转换",
-                    "转简体" to "繁体歌词统一显示成简体",
-                    "转繁体" to "简体歌词统一显示成繁体"
+                    "关闭" to "不转换",
+                    "转简体" to "繁→简",
+                    "转繁体" to "简→繁"
                 ),
                 title = "简繁转换",
-                summary = "把歌词统一成自己习惯的字形，改完立即对当前这首歌生效"
+                summary = "统一字形，立即生效"
             )
 
             // 屏蔽词：正则命中整行就整行不显示
@@ -1423,7 +1426,7 @@ fun LyricContentSection(context: Context, reorder: SectionReorder? = null) {
                 key = MasterPrefs.KEY_HOOK_BLOCKED_WORDS_REGEX,
                 default = "",
                 title = "屏蔽内容",
-                summary = "填要删掉的字，多个用逗号隔开；填「（」就隐藏括号和里面的内容"
+                summary = "多个用逗号隔开"
             )
 
             // 标题去括号：不用写正则，开一个开关就把「（DJ女版）」这类后缀连括号一起藏掉
@@ -1432,7 +1435,7 @@ fun LyricContentSection(context: Context, reorder: SectionReorder? = null) {
                 key = MasterPrefs.KEY_HOOK_HIDE_BRACKET_CONTENT,
                 default = false,
                 title = "隐藏标题里的括号",
-                summary = "歌名、歌手里的「（…）」连内容一起隐藏，不用填正则"
+                summary = "歌名歌手里的（…）一并隐藏"
             )
         }
 
@@ -1444,7 +1447,7 @@ fun LyricContentSection(context: Context, reorder: SectionReorder? = null) {
                 key = MasterPrefs.KEY_SHOW_REMAINING_TIME,
                 default = false,
                 title = "显示剩余时间",
-                summary = "副行空白时显示整首剩余，格式 -mm:ss"
+                summary = "副行空白时显示 -mm:ss"
             )
 
             // 剩余时间位置：下方 / 上方 / 两侧分栏 / 歌词左右两端
@@ -1455,8 +1458,8 @@ fun LyricContentSection(context: Context, reorder: SectionReorder? = null) {
                 options = listOf(
                     "主行下方" to "时间显示在歌词下边",
                     "主行上方" to "时间显示在歌词上边",
-                    "左右两边" to "左侧显示整首时长、右侧显示剩余（需开启分离歌词模式）",
-                    "歌词左右两端" to "同一行歌词两边各留一块空，左总时长右剩余，岛宽会自动撑开"
+                    "左右两边" to "左总时长·右剩余",
+                    "歌词左右两端" to "歌词两端留空，岛宽自动撑"
                 ),
                 title = "剩余时间位置",
                 summary = "整首剩余时间显示的位置"
@@ -1560,7 +1563,7 @@ fun LyricContentSection(context: Context, reorder: SectionReorder? = null) {
                 key = MasterPrefs.KEY_SIMULATE_UNTIMED_WORD,
                 default = false,
                 title = "无逐字时模拟逐字",
-                summary = "歌曲只有整行时间、没有逐字数据时，按时长模拟逐字推进；关闭则整句直接全亮"
+                summary = "无逐字数据时按时长模拟"
             )
         }
     }
@@ -1581,7 +1584,7 @@ fun FontSection(context: Context, reorder: SectionReorder? = null) {
             key = MasterPrefs.KEY_ISLAND_TYPEFACE_PATH,
             default = "",
             title = "字体文件路径",
-            summary = "自定义字体文件的绝对路径（留空使用系统默认字体）",
+            summary = "字体文件绝对路径，留空用系统字体",
             extraWrite = {
                 MasterPrefs.setString(context, MasterPrefs.KEY_CUSTOM_FONT_PATH, it)
             }
@@ -1664,7 +1667,7 @@ fun HyperlyricExtrasSection(context: Context, reorder: SectionReorder? = null) {
             key = MasterPrefs.KEY_REMOVE_FOCUS_WHITELIST,
             default = true,
             title = "解除焦点通知白名单",
-            summary = "移除系统对哪些应用能进通知中心的白名单限制"
+            summary = "移除可进通知中心的应用限制"
         )
         PrefSwitch(
             context = context,

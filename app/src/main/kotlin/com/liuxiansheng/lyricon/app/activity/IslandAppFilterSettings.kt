@@ -118,7 +118,7 @@ fun IslandLyricAppFilterRows(context: Context) {
             key = MasterPrefs.KEY_ISLAND_LYRIC_APP_FILTER_NO_ISLAND,
             default = false,
             title = "不生成超级岛",
-            summary = "被过滤的应用播媒体时连超级岛都不建；关着就只是不出歌词，系统原生岛照旧"
+            summary = "被过滤的应用连超级岛都不建；关着只是不出歌词，原生岛照旧"
         )
     }
 

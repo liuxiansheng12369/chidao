@@ -103,7 +103,16 @@ internal data class LyricViewStyle(
     val titleSlot: TitleSlot = TitleSlot(),
     val animParams: AnimParams = AnimParams(),
     /** 逐词强调（独立开关）：走正常逐字渲染并叠加强调，开启时整行动画特效让位 */
-    val emphasisGlow: Boolean = false
+    val emphasisGlow: Boolean = false,
+    /**
+     * 跑马灯参数（照上游 LyricViewStyle.Marquee 对齐）：
+     * 只对"没有逐字数据、只能整行滚"的超长行生效。
+     * 默认值等于改造前写死的常量，不改变现有观感。
+     */
+    val marqueePacePxPerSec: Float = 120f,
+    val marqueeStartDelayMs: Int = 400,
+    val marqueeLoopDelayMs: Long = 800,
+    val marqueeSpacingPx: Float = 70f
 ) {
     companion object {
 

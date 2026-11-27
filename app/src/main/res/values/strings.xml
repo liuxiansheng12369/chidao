@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">词岛</string>
     <string name="app_description">超级岛歌词 + 状态栏歌词（Xposed 模块，适配小米澎湃 OS / HyperOS）</string>
+    <string name="xposed_module_description">HyperOS 超级岛歌词与状态栏歌词模块</string>
 </resources>

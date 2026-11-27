@@ -22,6 +22,7 @@ import androidx.compose.foundation.background
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,6 +57,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -64,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -231,6 +234,8 @@ fun StoreScreen(onBack: () -> Unit, onOpenLyricSource: () -> Unit) {
     var sourceTab by remember { mutableStateOf(StoreSource.TOMAKINO) }
     var titleExpanded by remember { mutableStateOf(false) }
     var expandedNotes by remember { mutableStateOf<String?>(null) }
+    // 长按已装的源 → 弹卸载确认（系统弹窗最终确认，这里只负责把目标挑出来）
+    var uninstallTarget by remember { mutableStateOf<StoreItem?>(null) }
 
     // 有几个已装且可更新的源：入口角标、置顶区块、卡片角标都用这一个数
     val updates = items.filter { it.installState == InstallState.UPDATE_AVAILABLE }
@@ -299,6 +304,23 @@ fun StoreScreen(onBack: () -> Unit, onOpenLyricSource: () -> Unit) {
     }
 
     BackHandler { onBack() }
+
+    // 长按确认后走系统卸载界面；返回时 ON_RESUME 会重算安装态，卡片自己变回"安装"
+    uninstallTarget?.let { target ->
+        UninstallDialog(
+            name = target.name,
+            onDismiss = { uninstallTarget = null },
+            onConfirm = {
+                uninstallTarget = null
+                val intent = Intent(
+                    Intent.ACTION_DELETE,
+                    Uri.parse("package:${target.entry.applicationId}"),
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                val launched = runCatching { context.startActivity(intent) }.isSuccess
+                if (!launched) message = "系统没有可用的卸载界面，没能卸载"
+            },
+        )
+    }
 
     SkinTheme {
         val isDark = MiuixTheme.colorScheme.background.luminance() < 0.5f
@@ -397,6 +419,10 @@ fun StoreScreen(onBack: () -> Unit, onOpenLyricSource: () -> Unit) {
                                         else -> StoreInstaller.start(context, item, hosts)
                                     }
                                 },
+                                onLongPress = {
+                                    val busy = operations[item.providerId]?.active == true
+                                    if (item.installed != null && !busy) uninstallTarget = item
+                                },
                             )
                         }
                         // 一个作者一页；标题可折叠，点一下才展开作者那一行说明
@@ -422,7 +448,8 @@ fun StoreScreen(onBack: () -> Unit, onOpenLyricSource: () -> Unit) {
 
                     Text(
                         text = "上面两个标签是两批源，各自一页：Tomakino 做的和 Andrea-lyz 做的，谁做的就点谁的标签。" +
-                            "所有安装包都必须与目录声明的 SHA-256 和签名证书完全一致，安装一律由系统弹窗确认。",
+                            "所有安装包都必须与目录声明的 SHA-256 和签名证书完全一致，安装一律由系统弹窗确认。" +
+                            "已安装的源长按卡片可直接卸载，卸载同样由系统弹窗确认。",
                         fontSize = 12.sp,
                         color = mutedInk(),
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
@@ -652,8 +679,16 @@ private fun StoreRow(
     expanded: Boolean,
     onToggleNotes: () -> Unit,
     onAction: () -> Unit,
+    onLongPress: () -> Unit = {},
 ) {
-    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+    Column(
+        modifier = Modifier
+            // 长按整行：只有已安装的源才会被上层接收（未装的长按不弹任何东西）
+            .pointerInput(item.providerId, item.installed?.versionCode) {
+                detectTapGestures(onLongPress = { onLongPress() })
+            }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
         val showUpdate = item.installState == InstallState.UPDATE_AVAILABLE
         Row(verticalAlignment = Alignment.Top) {
             StoreIcon(item.providerId, item.name, item.entry.iconUrl)
@@ -901,4 +936,67 @@ private fun loadRemoteStoreIcon(
     canvas.drawBitmap(src, null, android.graphics.Rect(0, 0, px, px), paint)
     if (src !== out) src.recycle()
     return out.asImageBitmap()
+}
+
+/**
+ * 卸载确认弹窗。
+ * 只负责说清楚"卸载会失去什么"，最后那一下由系统卸载界面确认，
+ * 跟安装保持同一个口径：词岛不代替系统做卸载。
+ */
+@Composable
+private fun UninstallDialog(
+    name: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth(0.88f)
+                .clip(RoundedCornerShape(18.dp))
+                .background(MiuixTheme.colorScheme.surface)
+                .padding(horizontal = 22.dp, vertical = 20.dp),
+        ) {
+            Text(
+                text = "卸载「$name」？",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MiuixTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = "卸载后这个歌词源就失效：正在播的歌不再出词，要用得回商店重装。" +
+                    "卸载由系统弹窗做最后确认。",
+                fontSize = 13.sp,
+                color = mutedInk(),
+                modifier = Modifier.padding(top = 10.dp),
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 18.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                Text(
+                    text = "取消",
+                    fontSize = 14.sp,
+                    color = mutedInk(),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(9.dp))
+                        .clickable(onClick = onDismiss)
+                        .padding(horizontal = 14.dp, vertical = 7.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = "卸载",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFFE5484D),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(9.dp))
+                        .clickable(onClick = onConfirm)
+                        .padding(horizontal = 14.dp, vertical = 7.dp),
+                )
+            }
+        }
+    }
 }

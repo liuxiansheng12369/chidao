@@ -28,13 +28,20 @@ internal class LineRenderState {
 /**
  * 滚动步进器（V3 自研）。
  *
- * 文本超宽时，高亮推进到可见区一定比例即开始滚动（铺开滚，不堆到最后几个字，
- * 也不提前滚）；滚到自然到底，不用 finished 硬跳回末尾（否则行尾会"蹦"）。
+ * 文本超宽时的滚动策略：
+ * - 上游 `ScrollTextRenderer` 是整行从句子开头就按固定速度匀速滚（35dp/s），跟唱到哪无关；
+ * - 我们这边是逐字高亮，所以改成"跟着唱滚"：第一个字一开口就开始把文字往左推，
+ *   唱到可见区右边缘时整句已经铺开，后半句一直留在视野里，不会拖到快唱完才动。
+ * 滚到自然到底，不用 finished 硬跳回末尾（否则行尾会"蹦"）。
  */
 internal class ScrollStepper {
 
-    /** 滚动触发点：唱到可见区该比例处开始滚 */
-    private val triggerRatio = 0.85f
+    /**
+     * 滚动完成点：唱到整行的这个比例时，滚动刚好到底（句尾全部露出来）。
+     * 0.5f = 唱到一半就把长句滚好，后半句静止不再动（用户要求的观感）。
+     * 原 0.85 的"触发点 + 到句尾才滚完"表现为快唱完才动。
+     */
+    private val completeAtLineFraction = 0.5f
 
     /**
      * 计算当前滚动偏移。
@@ -52,14 +59,10 @@ internal class ScrollStepper {
     ): Float {
         if (totalWidth <= viewWidth) return 0f
         val minScroll = -(totalWidth - viewWidth)
-        val trigger = viewWidth * triggerRatio
-        return if (highlightWidth > trigger) {
-            val range = totalWidth - trigger
-            val progress = ((highlightWidth - trigger) / range).coerceIn(0f, 1f)
-            (minScroll * progress).coerceIn(minScroll, 0f)
-        } else {
-            0f
-        }
+        // 前半句滚到底，后半句保持不动
+        val range = (totalWidth * completeAtLineFraction).coerceAtLeast(1f)
+        val progress = (highlightWidth / range).coerceIn(0f, 1f)
+        return (minScroll * progress).coerceIn(minScroll, 0f)
     }
 }
 

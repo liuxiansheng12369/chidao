@@ -116,6 +116,8 @@ private const val SB_ICON_MIN_SIZE = 10
 private const val SB_ICON_MAX_SIZE = 24
 private const val SB_DEF_ICON_SIZE = 16
 private const val SB_DEF_SWITCH_ANIM = 1        // SCALE_UP（副行放大）
+private val yoyoSwitchOptions = com.liuxiansheng.lyricon.app.util.YoYoAnimOptions.options
+private val yoyoSwitchValues = com.liuxiansheng.lyricon.app.util.YoYoAnimOptions.values
 private const val SB_ICON_SPACING_DP = "key_hook_status_bar_lyric_icon_spacing_dp"
 private const val SB_ICON_MIN_SPACING = 0
 private const val SB_ICON_MAX_SPACING = 16
@@ -224,7 +226,7 @@ fun StatusBarLyricSettingsScreen() {
                         key = StatusBarPrefs.KEY_HOOK_ENABLE_STATUS_BAR_LYRIC,
                             default = true,
                             title = "启用状态栏歌词",
-                            summary = "在系统状态栏显示歌词，切换实时生效，独立于超级岛总开关",
+                            summary = "在状态栏显示歌词，实时生效",
                             extraWrite = { value ->
                                 // 互拆（双向）：状态栏歌词开关与超级岛开关永远相反——
                                 // 开状态栏→关超级岛，关状态栏→开超级岛
@@ -259,11 +261,8 @@ fun StatusBarLyricSettingsScreen() {
                             summary = "",
                             // 说明跟着当前选中项变：选哪个就说明哪个，不并成一句
                             summaryOf = { i ->
-                                if (i == 0) {
-                                    "状态栏根：叠加在整条状态栏上，不会挤走 WiFi/信号/电池等系统图标"
-                                } else {
-                                    "时钟：插在时钟旁边，会挤压 WiFi/信号/电池等图标的位置"
-                                }
+                                if (i == 0) "叠加在整条状态栏上，不挤系统图标"
+                                else "插在时钟旁，会挤系统图标"
                             },
                             // 选中项变化 → 控制下方「插入位置」是否显示
                             extraWrite = { v -> anchorIsClock = (v == 1) },
@@ -340,7 +339,7 @@ fun StatusBarLyricSettingsScreen() {
                         key = SB_RAINBOW,
                             default = SB_DEF_RAINBOW,
                             title = "彩虹歌词",
-                            summary = "歌词呈 16 色逐字渐变，优先于封面取色与自定义颜色（默认开启）",
+                            summary = "16 色逐字渐变，优先于取色",
                             extraWrite = { value ->
                                 if (value) StatusBarPrefs.setBoolean(context, SB_COVER_COLOR, false)
                             },
@@ -351,7 +350,7 @@ fun StatusBarLyricSettingsScreen() {
                         key = SB_COVER_COLOR,
                             default = SB_DEF_COVER_COLOR,
                             title = "封面取色",
-                            summary = "从专辑封面提取颜色作为歌词颜色（开启时自动关闭彩虹）",
+                            summary = "按封面取色，开启时关闭彩虹",
                             extraWrite = { value ->
                                 if (value) StatusBarPrefs.setBoolean(context, SB_RAINBOW, false)
                             },
@@ -362,7 +361,7 @@ fun StatusBarLyricSettingsScreen() {
                         key = SB_INVERT,
                             default = false,
                             title = "黑白背景反色",
-                            summary = "歌词字色跟随状态栏背景亮度：亮背景→深色字，暗背景→浅色字（开启时优先于彩虹/封面取色/自定义颜色）",
+                            summary = "字色跟随背景明暗，优先于其它配色",
                             extraWrite = { value ->
                                 if (value) {
                                     StatusBarPrefs.setBoolean(context, SB_RAINBOW, false)
@@ -385,7 +384,7 @@ fun StatusBarLyricSettingsScreen() {
                         key = SB_FONT_FAMILY,
                             default = SB_DEF_FONT_FAMILY,
                             title = "字体",
-                            summary = "选择歌词字体（默认系统 sans-serif）",
+                            summary = "默认系统 sans-serif",
                             options = listOf(
                                 "系统默认（sans-serif）" to "",
                                 "中等（sans-serif-medium）" to "",
@@ -411,7 +410,7 @@ fun StatusBarLyricSettingsScreen() {
                         key = SB_FONT_WEIGHT,
                             default = SB_DEF_FONT_WEIGHT,
                             title = "字重",
-                            summary = "调整歌词文字粗细（细 100 ~ 特粗 900，默认粗体 700）",
+                            summary = "100–900，默认 700",
                             options = listOf(
                                 "极细（100）" to "",
                                 "细体（300）" to "",
@@ -428,7 +427,7 @@ fun StatusBarLyricSettingsScreen() {
                         key = SB_TEXT_COLOR,
                             default = 0xFFFFFFFF.toInt(),
                             title = "歌词颜色",
-                            summary = "自定义歌词文字颜色（主色/高亮同色，对齐超级岛）",
+                            summary = "主色与高亮同色",
                             presetColors = remember {
                                 listOf(
                                     0xFFFFFFFF.toInt() to "纯白",
@@ -481,7 +480,7 @@ fun StatusBarLyricSettingsScreen() {
                             key = SB_PROGRESS_COLOR_MODE,
                             default = SB_DEF_PROGRESS_COLOR_MODE,
                             title = "进度条颜色",
-                            summary = "彩虹渐变=七彩流光；跟随歌词颜色=与当前歌词同色",
+                            summary = "彩虹流光 / 歌词同色",
                             options = listOf(
                                 "跟随歌词颜色" to "",
                                 "彩虹渐变" to "",
@@ -590,9 +589,9 @@ fun StatusBarLyricSettingsScreen() {
                                 "聚光灯" to "聚光灯移动照亮文字",
                                 "镜像倒影" to "下方镜像倒影",
                                 "激光扫描" to "激光线扫描揭示文字",
-                                "粒子聚合" to "粒子飞向文字聚合再散开",
+                                "粒子聚合" to "粒子聚拢再散开",
                                 "故障艺术" to "RGB色差错位+扫描线",
-                                "手写效果" to "从左到右逐渐显露+抖动",
+                                "手写效果" to "逐字显露+抖动",
                                 "波形背景" to "音频波形竖条背景",
                                 "星星散落" to "周围星星粒子闪烁",
                                 "旋转出现" to "旋转缩放出现停留消失",
@@ -604,7 +603,7 @@ fun StatusBarLyricSettingsScreen() {
                                 17, 18, 19, 20, 22, 23, 24, 25
                             ),
                             title = "歌词动画效果",
-                            summary = "状态栏歌词的持续动画（与超级岛同一套效果库，各自独立设置）",
+                            summary = "状态栏歌词的持续动画",
                         )
                         PrefSpinner(
                         context = context,
@@ -612,21 +611,22 @@ fun StatusBarLyricSettingsScreen() {
                         key = SB_SWITCH_ANIM,
                             default = SB_DEF_SWITCH_ANIM,
                             options = listOf(
-                                "无动画" to "原始切换，无过渡效果",
-                                "副行放大" to "副行放大并移到主行位置",
-                                "淡入淡出" to "主行淡出、副行原地淡入",
-                                "上滑" to "主行上移淡出、副行自下滑入",
-                                "下滑" to "主行下移淡出、副行自上滑入",
-                                "缩放淡入" to "主行缩小淡出、副行放大淡入",
-                                "3D 翻转" to "沿纵轴翻出翻入",
-                                "左滑" to "主行左滑淡出、副行右侧滑入",
-                                "右滑" to "主行右滑淡出、副行左侧滑入",
-                                "弹性放大" to "副行带过冲弹性放大入场",
-                                "竖向翻转" to "沿横轴上下翻出翻入",
-                                "模糊淡入" to "主行糊掉、副行由糊变清晰（Android 12+）",
-                            ),
+                                "无动画" to "无过渡",
+                                "副行放大" to "副行升主行",
+                                "淡入淡出" to "主淡出·副淡入",
+                                "上滑" to "主上移·副下入",
+                                "下滑" to "主下移·副上入",
+                                "缩放淡入" to "主缩出·副放入",
+                                "3D 翻转" to "纵轴翻转",
+                                "左滑" to "主左出·副右入",
+                                "右滑" to "主右出·副左入",
+                                "弹性放大" to "副行弹入",
+                                "竖向翻转" to "横轴翻转",
+                                "模糊淡入" to "主糊·副渐清",
+                            ) + yoyoSwitchOptions,
+                            values = (0..11).toList() + yoyoSwitchValues,
                             title = "换句动画",
-                            summary = "状态栏自己的换句过渡（与超级岛分开设置，互不影响）",
+                            summary = "状态栏自己的换句过渡",
                         )
                     }
 
@@ -649,7 +649,7 @@ fun StatusBarLyricSettingsScreen() {
                             default = 0,
                             options = pressOptions,
                             title = "单击",
-                            summary = "点一下歌词的动作，默认无操作；配了动作后单击立即执行，双击动作会让位，单击设回无操作双击照常",
+                            summary = "双击配了动作时单击让位",
                         )
                         PrefSpinner(
                         context = context,
@@ -658,7 +658,7 @@ fun StatusBarLyricSettingsScreen() {
                             default = 0,
                             options = pressOptions,
                             title = "双击",
-                            summary = "双击歌词的动作",
+                            summary = "",
                         )
                         PrefSpinner(
                         context = context,
@@ -667,7 +667,7 @@ fun StatusBarLyricSettingsScreen() {
                             default = SB_DEF_LONG_PRESS,
                             options = pressOptions,
                             title = "长按",
-                            summary = "长按歌词的动作",
+                            summary = "",
                         )
                         val swipeOptions = listOf(
                             "无操作" to "",
@@ -681,7 +681,7 @@ fun StatusBarLyricSettingsScreen() {
                             default = SB_DEF_SWIPE_LEFT,
                             options = swipeOptions,
                             title = "左滑",
-                            summary = "向左滑动歌词的动作",
+                            summary = "",
                         )
                         PrefSpinner(
                         context = context,
@@ -690,7 +690,7 @@ fun StatusBarLyricSettingsScreen() {
                             default = SB_DEF_SWIPE_RIGHT,
                             options = swipeOptions,
                             title = "右滑",
-                            summary = "向右滑动歌词的动作",
+                            summary = "",
                         )
                         PrefSwitch(
                         context = context,
@@ -706,12 +706,12 @@ fun StatusBarLyricSettingsScreen() {
                         key = SB_CONTROL_PANEL_STYLE,
                             default = 0,
                             options = listOf(
-                                "经典卡片" to "封面在左、按钮在下的简洁卡片",
-                                "下拉媒体卡" to "从歌词往下拉出的通知栏风格毛玻璃媒体卡",
-                                "词岛卡片" to "浅蓝白卡片，封面+歌名+进度+蓝色播放键",
+                                "经典卡片" to "封面左·按钮下",
+                                "下拉媒体卡" to "下拉通知栏风格",
+                                "词岛卡片" to "浅蓝白·蓝播放键",
                             ),
                             title = "控制面板样式",
-                            summary = "选「控制面板」动作时用哪种面板，随时可切回经典",
+                            summary = "选「控制面板」动作时生效",
                         )
                         PrefSwitch(
                         context = context,
@@ -719,7 +719,7 @@ fun StatusBarLyricSettingsScreen() {
                         key = SB_ROOT_TOUCH_INTERCEPT,
                             default = true,
                             title = "根窗口触摸拦截（ColorOS）",
-                            summary = "部分 ColorOS 会吞掉状态栏的触摸事件，开启后歌词手势才可用；若状态栏触摸异常可关闭，改完需重启状态栏",
+                            summary = "ColorOS 吞触摸时开启，需重启状态栏",
                         )
                     }
 

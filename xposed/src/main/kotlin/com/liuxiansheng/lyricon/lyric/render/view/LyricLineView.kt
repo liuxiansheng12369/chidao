@@ -308,6 +308,8 @@ internal class LyricLineView(context: Context) : View(context) {
                 "begin=${model.begin} end=${model.end} dur=${model.duration}"
         }
         activeRenderer.updateLayout(model, renderState, width, height)
+        // 跑马灯行：换行即起滚，不等下一次位置回调，长句一出现就动起来
+        if (activeRenderer === marquee) marquee.kickstart()
         // 全亮模式：换行即跳满，不依赖位置推进
         if (fullHighlightFlag) {
             progressive.jumpToFull(model, renderState, width)
@@ -334,7 +336,11 @@ internal class LyricLineView(context: Context) : View(context) {
         gradient: Boolean,
         centerIfPossible: Boolean,
         rightIfPossible: Boolean,
-        wordMotion: WordMotion? = null
+        wordMotion: WordMotion? = null,
+        marqueePacePxPerSec: Float = 120f,
+        marqueeStartDelayMs: Int = 400,
+        marqueeLoopDelayMs: Long = 800,
+        marqueeSpacingPx: Float = 70f
     ) {
         // 特效直接用样式的两条色带，和普通渲染同源
         effectBasePalette = highlight.background
@@ -365,6 +371,12 @@ internal class LyricLineView(context: Context) : View(context) {
         timeline.rightIfPossible = rightIfPossible
         marquee.centerIfPossible = centerIfPossible
         marquee.rightIfPossible = rightIfPossible
+
+        // 跑马灯参数（照上游对齐）：速度/起滚等待/循环间隔/重影间距，默认值与原写死常量一致
+        marquee.pacePxPerSec = marqueePacePxPerSec.coerceIn(1f, 400f)
+        marquee.startDelayMs = marqueeStartDelayMs.coerceIn(0, 3000).toLong()
+        marquee.gapAfterLoopMs = marqueeLoopDelayMs.coerceIn(0L, 5000L)
+        marquee.ghostGapPx = marqueeSpacingPx.coerceIn(0f, 400f)
 
         if (wordMotion != null) progressive.waveOn = wordMotion.enabled
     }

@@ -1,8 +1,7 @@
 /*
- * 词岛 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
- * 包名：com.liuxiansheng.chidao
- * Copyright 2026 liuxiansheng（刘先生）
- * 本文件为 词岛 自研实现（工具/扩展层，保留自 V3 移植以来的稳定逻辑）。
+ * Copyright 2026 Proify, Tomakino
+ * Licensed under the Apache License, Version 2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  */
 
 package io.github.proify.lyricon.colorextractor.palette

@@ -202,10 +202,11 @@ internal class LyricCanvasPainter {
     /** 一个字的着色画笔（复用，避免每帧 new） */
     private val unitPaint = TextPaint(Paint.ANTI_ALIAS_FLAG)
 
-    private fun unitPaintOf(base: TextPaint, colors: IntArray, index: Int): TextPaint {
+    private fun unitPaintOf(base: TextPaint, colors: IntArray, index: Int, lit: Boolean): TextPaint {
         unitPaint.set(base)
         unitPaint.shader = null
-        unitPaint.color = colors[if (index >= 0) (index + paletteOffset) % colors.size else 0]
+        val color = colors[if (index >= 0) (index + paletteOffset) % colors.size else 0]
+        unitPaint.color = color
         return unitPaint
     }
 
@@ -269,7 +270,7 @@ internal class LyricCanvasPainter {
         val vR = min(layerR, clipR)
         if (vR <= vL) return
         val liftY = if (waveOn) waveOffset(litWidth, unitL, unitR, paint.textSize, liftF, waveF) else 0f
-        val p = unitPaintOf(paint, colors, index)
+        val p = unitPaintOf(paint, colors, index, lit)
         canvas.withSave {
             clipRect(vL, 0f, vR, viewH.toFloat())
             drawText(text, sIdx, eIdx, drawX, baseY + liftY, p)
@@ -358,7 +359,7 @@ internal class LyricCanvasPainter {
         // 1.6.18：彩虹模式下必须用该字自己那一色（与暗/亮层同一套取色：调色板 + paletteOffset）。
         // 原实现只把逐字色用在辉光阴影上，字的填充仍然拿 litPaint 单色，
         // 于是只要这行有强调组，整个容器的字都会被刷成同一种颜色（用户看到的「整行变红」）。
-        val ownColor = if (hasRainbowLit) unitPaintOf(paint, litColors, charIndex).color else paint.color
+        val ownColor = if (hasRainbowLit) unitPaintOf(paint, litColors, charIndex, true).color else paint.color
         val drawPaint = if (glowing) {
             emphasisPaint.set(paint)
             emphasisPaint.shader = null
@@ -370,7 +371,7 @@ internal class LyricCanvasPainter {
             emphasisPaint
         } else if (hasRainbowLit) {
             // 没在发光的字也必须按自己那一色画，不能退回单色 litPaint
-            unitPaintOf(paint, litColors, charIndex)
+            unitPaintOf(paint, litColors, charIndex, true)
         } else {
             paint
         }

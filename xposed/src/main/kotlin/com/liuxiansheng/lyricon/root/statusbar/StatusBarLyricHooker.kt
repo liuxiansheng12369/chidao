@@ -47,6 +47,7 @@ import com.liuxiansheng.lyricon.lyric.render.view.Highlight
 import com.liuxiansheng.lyricon.lyric.render.view.LyricViewStyle
 import com.liuxiansheng.lyricon.lyric.render.view.RichLyricLineView
 import com.liuxiansheng.lyricon.lyric.render.view.TextLook
+import android.content.res.Resources
 import com.liuxiansheng.lyricon.lyric.render.view.WordMotion
 import io.github.libxposed.api.XposedInterface.Chain
 import io.github.libxposed.api.XposedInterface.Hooker
@@ -56,6 +57,19 @@ import java.lang.ref.WeakReference
 object StatusBarLyricHooker {
 
     private const val TAG = "StatusBarLyricHooker"
+
+    /**
+     * 跑马灯默认值（不开放设置项）：
+     * - 速度 44dp/s ≈ 120px/s：与词岛原来写死的 120px/s 一致，长句能在一句唱完前滑到尾；
+     *   上游默认 35dp/s 偏慢，实测"快到唱完才滚完"，所以不照抄速度。
+     * - 起滚等待 0ms：句子一出现就开始滚，不再等 300ms（上游是 300）。
+     * - 循环间隔 0ms：滚完立刻接下一遍（与上游一致）。
+     * - 重影间距 50dp：跟上游一致。
+     */
+    private const val MARQUEE_SPEED_DP = 44f
+    private const val MARQUEE_SPACING_DP = 50f
+    private const val MARQUEE_INITIAL_DELAY_MS = 0
+    private const val MARQUEE_LOOP_DELAY_MS = 0L
     /** 恢复超级岛防抖窗口：切歌/过渡瞬间 media 短暂翻非播放时，稳定停播这么久才恢复岛 */
     private const val NOT_PLAYING_RESTORE_DEBOUNCE_MS = 500L
     /** 封面旋转一圈的时长（毫秒）：与超级岛、艺术主题唱片统一口径，都按秒算 */
@@ -175,6 +189,16 @@ private var lastIslandContainersSignature: String? = null
 
     // ================= 节流 =================
     private var policyCheckCounter = 0
+    private var visDiagCounter = 0
+
+    // 播放状态查询按 500ms 缓存（原来是每帧一次 binder 往返）
+    private val PLAYING_QUERY_TTL_MS = 500L
+    private var playingQueryAtMs = 0L
+    private var playingQueryValue = false
+
+    // 播放期间的绘制节流：两次真正绘制之间至少隔 16ms（60Hz）
+    private val FRAME_MIN_INTERVAL_MS = 16L
+    private var lastDrawFrameMs = 0L
 
     private val frameCallback: Choreographer.FrameCallback = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
@@ -184,11 +208,24 @@ private var lastIslandContainersSignature: String? = null
                 framePosted = false
                 return
             }
+            // ★性能：滚动/播放期间把帧循环压到 60Hz。
+            // 120Hz 屏上每帧都整行 invalidate + 重算高亮，等于每秒 120 次全行重绘；
+            // 歌词滚动与逐字推进用不到 120Hz，隔一帧刷一次肉眼无差，CPU 直接砍一半。
+            val playingNow = stablePlaying()
+            val frameNowMs = SystemClock.elapsedRealtime()
+            if (playingNow && !iconRotating &&
+                frameNowMs - lastDrawFrameMs < FRAME_MIN_INTERVAL_MS
+            ) {
+                Choreographer.getInstance().postFrameCallback(this)
+                return
+            }
+            lastDrawFrameMs = frameNowMs
             // 1) 切歌版本校验：版本变了 → 立即清上一首残留，待新行到达再显示
             val version = LyriconDataBridge.versionCounter.get()
             if (version != appliedVersion) {
                 appliedVersion = version
                 lastLineRef = null
+                invalidatePlayingCache()
                 view.line = null
                 view.visibility = android.view.View.GONE
                 // 3.0.957：切歌后重新应用样式（字体/粗体/字重 typeface）。
@@ -277,10 +314,12 @@ private var lastIslandContainersSignature: String? = null
             // 4) 播放检测：位置推进 → 播放中
             val now = SystemClock.elapsedRealtime()
             if (pos > lastPos && now - lastPosTime < 1500) {
+                if (!isPlaying) invalidatePlayingCache()
                 isPlaying = true
             } else if (now - lastPosTime > 1500) {
                 if (isPlaying) {
                     isPlaying = false
+                    invalidatePlayingCache()
                     // 暂停/停止：封面图标立即与歌词一起隐藏（不等低频 15 帧兜底）
                     iconView?.visibility = android.view.View.GONE
                 }
@@ -337,14 +376,18 @@ private var lastIslandContainersSignature: String? = null
                 mainHandler.removeCallbacks(slowTick)
                 // 暂停且没有常驻旋转图标时，把 60/120Hz 帧循环降成 5Hz 慢轮询：
                 // 歌词/时钟/避让这些低频策略照旧生效，只是不再白白吃满帧。
-                if (!stablePlaying() && !iconRotating) {
+                if (!playingNow && !iconRotating) {
                     mainHandler.postDelayed(slowTick, 200L)
                 } else {
                     Choreographer.getInstance().postFrameCallback(this)
                 }
             }
-            // 状态栏歌词消失诊断：每帧采样，只在可见性/尺寸/位置/透明度变化时打一行
-            runCatching { logLyricVisibilityChange() }
+            // 状态栏歌词消失诊断：每 15 帧采一次（原来是每帧取屏幕坐标+拼字符串，
+            // 120Hz 下每秒上百次 getLocationOnScreen 和临时对象，纯属白烧主线程）
+            if (++visDiagCounter >= 15) {
+                visDiagCounter = 0
+                runCatching { logLyricVisibilityChange() }
+            }
         }
     }
 
@@ -399,20 +442,40 @@ private var lastIslandContainersSignature: String? = null
     /** 状态栏歌词消失诊断的上一次快照（只在变化时打日志） */
     private var lastLyricVisSig: String? = null
 
+    // 廉价前置快照：先用基本类型/引用比对，没变化就直接返回，
+    // 避免每次采样都 getLocationOnScreen + 拼一长串字符串
+    private var lastVisKinds = 0L
+    private var lastLyricVisAlpha = -1
+    private var lastParentRef: java.lang.ref.WeakReference<android.view.ViewGroup>? = null
+
     /** 上一次"是否显示"的判定结果（只在变化时打日志） */
     private var lastShouldShow: Boolean? = null
 
     /**
      * 状态栏歌词消失诊断（真我 ColorOS 16）。
      *
-     * 每帧采样歌词视图与 wrapper 的 可见性 / 附着状态 / 尺寸 / 透明度 / 屏幕位置 / 父容器，
-     * 与上一帧签名比较，**只在发生变化时输出一行**，因此不会刷屏。
-     * 用途：判断歌词"消失"到底是 GONE/INVISIBLE、被搬出窗口（attached=false）、
-     * 被压成 0 尺寸、透明度归零，还是被系统重排到屏外。
+     * 采样歌词视图与 wrapper 的 可见性 / 附着状态 / 尺寸 / 透明度 / 父容器，
+     * 与上一次快照比较，**只在发生变化时输出一行**。
+     * 判定顺序：先比基本类型，没变就直接 return；只有变了才去取屏幕坐标拼日志。
      */
     private fun logLyricVisibilityChange() {
         val lyric = lyricView ?: return
         val wrapper = wrapperRef?.get()
+        val parent = lyric.parent as? android.view.ViewGroup
+        // 4 个布尔/枚举压进一个 Long，引用另比，全部零分配
+        val kinds = (lyric.visibility.toLong() and 0xFFFF) or
+                (if (lyric.isAttachedToWindow) 1L shl 16 else 0L) or
+                (if (wrapper?.visibility == android.view.View.VISIBLE) 1L shl 17 else 0L) or
+                (if (wrapper?.isAttachedToWindow == true) 1L shl 18 else 0L) or
+                (lyric.width.toLong() shl 24) or
+                (lyric.height.toLong() shl 44)
+        val parentChanged = parent !== lastParentRef?.get()
+        val alphaChanged = (lyric.alpha * 100f).toInt() != lastLyricVisAlpha
+        if (kinds == lastVisKinds && !parentChanged && !alphaChanged) return
+        lastVisKinds = kinds
+        lastLyricVisAlpha = (lyric.alpha * 100f).toInt()
+        lastParentRef = parent?.let { java.lang.ref.WeakReference(it) }
+
         val loc = IntArray(2)
         val located = runCatching {
             lyric.getLocationOnScreen(loc)
@@ -422,7 +485,7 @@ private var lastIslandContainersSignature: String? = null
             loc[0] = -1
             loc[1] = -1
         }
-        val parentName = (lyric.parent as? View)?.javaClass?.simpleName ?: "null"
+        val parentName = parent?.javaClass?.simpleName ?: "null"
         val sig = lyric.visibility.toString() + '|' +
                 lyric.isAttachedToWindow + '|' +
                 lyric.width + 'x' + lyric.height + '|' +
@@ -1159,6 +1222,22 @@ private var lastIslandContainersSignature: String? = null
     // ================= 时钟隐藏策略 =================
     /** 实时播放态：直接查 MediaSession（不靠进度推进猜，重启状态栏/数据流断也能识别） */
     private fun mediaActuallyPlaying(): Boolean {
+        // ★性能：这个方法原来每帧都跨 binder 走一次 getActiveSessions，还要为每个会话新建
+        // MediaController，120Hz 下等于每秒上百次 IPC + 上百个临时对象，全部落在 SystemUI 主线程。
+        // 现在加 500ms 缓存，播放/暂停切换由下面的 invalidatePlayingCache() 主动打洞。
+        val nowMs = SystemClock.elapsedRealtime()
+        if (nowMs - playingQueryAtMs < PLAYING_QUERY_TTL_MS) return playingQueryValue
+        playingQueryAtMs = nowMs
+        playingQueryValue = queryMediaActuallyPlaying()
+        return playingQueryValue
+    }
+
+    /** 已知播放状态发生跳变（位置推进/停止、切歌）时清缓存，下一次查询立刻回源。 */
+    private fun invalidatePlayingCache() {
+        playingQueryAtMs = 0L
+    }
+
+    private fun queryMediaActuallyPlaying(): Boolean {
         return runCatching {
             val context = appContext ?: return@runCatching false
             val msm = context.getSystemService(android.content.Context.MEDIA_SESSION_SERVICE)
@@ -1804,11 +1883,24 @@ private var lastIslandContainersSignature: String? = null
      *  从不消费/修改分发（chain.proceed 结果原样返回），故状态栏下拉通知栏与系统交互始终可用。 */
     internal class TouchDispatchObserver : Hooker {
         private val HORIZONTAL_DOMINANCE_RATIO = 1.35f
+        /** 双击判定窗口：300 → 350ms（人实际双击大多 250~330ms，300 卡太紧漏判） */
+        private val DOUBLE_TAP_WINDOW_MS = 350L
+        /** 两次点击允许的位置漂移（60dp），指腹抖动比手指移动大 */
+        private val DOUBLE_TAP_SLOP_DP = 60f
+        /** 起滑判定：抬起时兜底用 8dp（原来 24dp 会让 10~24dp 的小拨动被当成轻点） */
+        private val SWIPE_MIN_DP = 8f
+        /** 拖动中提前触发滑动动作的门槛（≈16dp），不等抬手，手感跟手 */
+        private val SWIPE_FIRE_DP = 16f
+
         private var downX = 0f
         private var downY = 0f
         private var downInGestureZone = false
         private var moved = false
         private var longPressFired = false
+        private var swipeFired = false
+        private var gestureArmed = false
+        private var moveCancelPx = 0f
+        private var touchSlopPx = 0f
         private var longPressTask: Runnable? = null
         private var longPressHandler: android.view.View? = null
         private var lastTapTime = 0L
@@ -1827,16 +1919,33 @@ private var lastIslandContainersSignature: String? = null
             return result
         }
 
+        private fun ensureMetrics(root: android.view.View) {
+            if (touchSlopPx > 0f) return
+            val vc = android.view.ViewConfiguration.get(root.context)
+            touchSlopPx = vc.scaledTouchSlop.toFloat()
+            val dm = root.resources.displayMetrics.density
+            // 长按取消：允许指腹轻微抖动，取 24dp 与 touchSlop 的较大值
+            moveCancelPx = Math.max(touchSlopPx, 24f * dm)
+        }
+
         private fun observe(ev: android.view.MotionEvent, root: android.view.View) {
-            if (!hasGestureEnabled()) return
+            val action = ev.actionMasked
+            // 只在按下判定一次（原来每个 MOVE 都要读 5 次 prefs）
+            if (action == android.view.MotionEvent.ACTION_DOWN) {
+                gestureArmed = hasGestureEnabled()
+            }
+            if (!gestureArmed) return
             val wrapper = wrapperRef?.get()
-            when (ev.actionMasked) {
+            ensureMetrics(root)
+            val dm = root.resources.displayMetrics.density
+            when (action) {
                 android.view.MotionEvent.ACTION_DOWN -> {
                     if (!inSequence) {
                         inSequence = true
                         downX = ev.rawX
                         downY = ev.rawY
                         moved = false
+                        swipeFired = false
                         longPressFired = false
                         // 双状态手势区：歌词可见 → 歌词 wrapper；否则播放中 → 状态栏根区
                         downInGestureZone = gestureHitTest(wrapper, root, ev.rawX, ev.rawY)
@@ -1847,14 +1956,24 @@ private var lastIslandContainersSignature: String? = null
                     if (inSequence && downInGestureZone && !longPressFired) {
                         val dx = ev.rawX - downX
                         val dy = ev.rawY - downY
-                        val threshold = (24f * density).toInt()
-                        if (Math.abs(dx) > threshold || Math.abs(dy) > threshold) moved = true
-                        if (moved) cancelLongPress()
+                        if (Math.abs(dx) > moveCancelPx || Math.abs(dy) > moveCancelPx) moved = true
+                        // 横滑跟手：一过门槛立刻执行，不再等抬手
+                        if (!swipeFired) {
+                            val firePx = Math.max(touchSlopPx * 1.5f, SWIPE_FIRE_DP * dm)
+                            if (Math.abs(dx) > firePx &&
+                                Math.abs(dx) > Math.abs(dy) * HORIZONTAL_DOMINANCE_RATIO
+                            ) {
+                                swipeFired = true
+                                cancelLongPress()
+                                performSwipeAction(if (dx < 0f) swipeLeftAction() else swipeRightAction())
+                            }
+                        }
+                        if (moved || swipeFired) cancelLongPress()
                     }
                 }
                 android.view.MotionEvent.ACTION_UP -> {
                     if (inSequence) {
-                        if (downInGestureZone && !longPressFired) {
+                        if (downInGestureZone && !longPressFired && !swipeFired) {
                             if (moved) {
                                 dispatchSwipe(ev)
                             } else {
@@ -1865,9 +1984,9 @@ private var lastIslandContainersSignature: String? = null
                                     performGestureAction(single, haptic = true)
                                 } else {
                                     val now = android.os.SystemClock.uptimeMillis()
-                                    if (now - lastTapTime < 300 &&
-                                        Math.abs(ev.rawX - lastTapX) < (60f * density) &&
-                                        Math.abs(ev.rawY - lastTapY) < (60f * density)
+                                    if (now - lastTapTime < DOUBLE_TAP_WINDOW_MS &&
+                                        Math.abs(ev.rawX - lastTapX) < (DOUBLE_TAP_SLOP_DP * dm) &&
+                                        Math.abs(ev.rawY - lastTapY) < (DOUBLE_TAP_SLOP_DP * dm)
                                     ) {
                                         lastTapTime = 0
                                         performGestureAction(doubleTapAction(), haptic = true)
@@ -1882,12 +2001,14 @@ private var lastIslandContainersSignature: String? = null
                         cancelLongPress()
                         inSequence = false
                         longPressFired = false
+                        swipeFired = false
                     }
                 }
                 android.view.MotionEvent.ACTION_CANCEL -> {
                     cancelLongPress()
                     inSequence = false
                     longPressFired = false
+                    swipeFired = false
                 }
             }
         }
@@ -1938,10 +2059,12 @@ private var lastIslandContainersSignature: String? = null
 
 
         private fun dispatchSwipe(ev: android.view.MotionEvent) {
+            if (swipeFired) return
             val dx = ev.rawX - downX
             val dy = ev.rawY - downY
-            val threshold = (8f * density).toInt()
+            val threshold = SWIPE_MIN_DP * density
             if (Math.abs(dx) < threshold || Math.abs(dx) <= Math.abs(dy) * HORIZONTAL_DOMINANCE_RATIO) return
+            swipeFired = true
             performSwipeAction(if (dx < 0f) swipeLeftAction() else swipeRightAction())
         }
     }
@@ -2376,7 +2499,13 @@ private var lastIslandContainersSignature: String? = null
             rightIfPossible = false,
             lyricEffect = lyricEffect,
             // 状态栏的效果颜色也跟"状态栏歌词文字颜色"设置走，不再用彩虹/封面独立配色
-            effectSolidColor = textColor
+            effectSolidColor = textColor,
+            // 跑马灯（超长行、无逐字数据）参数：直接照上游默认值写死，不开放设置项
+            // 上游 Defaults：速度 35dp/s、重影间距 50dp、起滚等待 300ms、循环间隔 0ms、无限循环、末尾不停
+            marqueePacePxPerSec = MARQUEE_SPEED_DP * Resources.getSystem().displayMetrics.density,
+            marqueeStartDelayMs = MARQUEE_INITIAL_DELAY_MS,
+            marqueeLoopDelayMs = MARQUEE_LOOP_DELAY_MS,
+            marqueeSpacingPx = MARQUEE_SPACING_DP * Resources.getSystem().displayMetrics.density
         )
     }
 

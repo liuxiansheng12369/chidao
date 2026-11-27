@@ -2165,8 +2165,7 @@ internal fun AdvancedSettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit 
                                 recordEnabled = value
                                 ListenRecordsStore.setEnabled(context, value)
                             }
-                            val recordSummary = "由词岛模块在系统里抓取，不需要保持 App 打开；" +
-                                "关掉后不再新增记录，已有的今日记录和累计数字都保留"
+                            val recordSummary = "模块在系统里抓取，App 关着也记账；关掉后不再新增，旧记录保留"
                             // 凝光模式要走 COUI 行：axis 的标题色是写死的深色，黑底下不可读
                             if (CouiUiState.enabled.value) {
                                 CouiSwitchRow(
@@ -2255,7 +2254,7 @@ internal fun AdvancedSettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit 
                             )
                             PrefArrow(
                                 title = "导入主题包",
-                                summary = "选一个主题 zip 导入（如「星云·深空」），导入后回首页主题条切换",
+                                summary = "导入主题 zip（如「星云·深空」）",
                                 onClick = {
                                     runCatching {
                                         themeLauncher.launch(
@@ -2276,7 +2275,7 @@ internal fun AdvancedSettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit 
                             )
                             PrefArrow(
                                 title = "已导入主题",
-                                summary = "已导入 $themeCount 个，点一项单独删除（不影响其它主题）",
+                                summary = "已导入 $themeCount 个，点一项删除",
                                 onClick = {
                                     val list = importedThemes(context)
                                     if (list.isEmpty()) {
@@ -2361,8 +2360,7 @@ internal fun AdvancedSettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit 
                                 key = "pref_debug_panel_enabled",
                                 default = false,
                                 title = "调试项",
-                                summary = "默认关闭。打开后下面才出现打印日志、歌词源自检、性能监控和性能数据；" +
-                                    "平时关着，这几项一起收起，界面上不占地方",
+                                summary = "默认关；打开后显示下面几项排障入口",
                                 extraWrite = { on ->
                                     debugPanelOn = on
                                     // 收起调试项时把子项全部复位成默认关：
@@ -2383,28 +2381,25 @@ internal fun AdvancedSettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit 
                                     key = "pref_debug_logging",
                                     default = false,
                                     title = "打印日志",
-                                    summary = "默认关闭。排障时打开，日志写进 LSPosed 模块日志——" +
-                                        "手机上打开 LSPosed → 日志 直接就能看（搜 Lyricon），不用接电脑；收完记得关掉",
+                                    summary = "默认关；打开后写进 LSPosed 模块日志（搜 Lyricon）",
                                 )
                                 PrefSwitch(
                                     context = context,
                                     key = "lyricsource_diag_enabled",
                                     default = false,
                                     title = "歌词源自检",
-                                    summary = "默认关闭。打开后歌词源页会显示扫描诊断（可见包数、认出几个源、" +
-                                        "包可见权限、被隐藏的源等）；只影响诊断信息显不显示，源检测本身一直在跑",
+                                    summary = "默认关；打开后歌词源页显示扫描诊断",
                                 )
                                 PrefSwitch(
                                     context = context,
                                     key = "pref_debug_perf_monitor",
                                     default = false,
                                     title = "性能监控",
-                                    summary = "默认关闭。打开后模块统计 hook 热路径耗时和掉帧数，" +
-                                        "每 5 秒更新一次，结果在下面「性能数据」里看，不用接电脑；看完记得关",
+                                    summary = "默认关；打开后统计 hook 耗时与掉帧，每 5 秒更新",
                                 )
                                 PrefArrow(
                                     title = "性能数据",
-                                    summary = "掉帧数、最慢的 hook 耗时；没开性能监控时这里是空的",
+                                    summary = "掉帧、最慢 hook 耗时",
                                     onClick = { perfSnapshotOpen = true },
                                 )
                             }
