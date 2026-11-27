@@ -20,9 +20,9 @@ val releaseNameRe = """extra\["appReleaseVersionName"\] = "(\d+)\.(\d+)\.(\d+)""
 val testPatchRe = """extra\["appTestPatch"\] = (\d+)""".toRegex()
 
 // ↓ 下面是版本号存档（打包脚本自己改写它们），不是本次构建生效值，别手改
-extra["appVersionCode"] = 2870
+extra["appVersionCode"] = 2872
 extra["appReleaseVersionName"] = "2.4.0"
-extra["appTestPatch"] = 1
+extra["appTestPatch"] = 3
 
 fun writeVersionToFile(code: Int, release: String, testPatch: Int) {
     var t = selfVersionFile.readText()
@@ -132,6 +132,8 @@ subprojects {
                 archiveFileName.set("${rootProject.name}-all-$buildType.zip")
                 destinationDirectory.set(rootProject.layout.buildDirectory.dir("distributions"))
                 from(rootProject.layout.buildDirectory.dir("all-apks/$buildType"))
+                // all-apks 里会一直累积历史 APK，几版之后 zip 就会超过 4G 的普通 zip 上限
+                isZip64 = true
             }
 
             val copyTask =
@@ -161,6 +163,12 @@ subprojects {
 
             tasks.matching { it.name == "assemble${variantName.replaceFirstChar { c -> c.uppercase() }}" }
                 .configureEach { finalizedBy(copyTask) }
+
+            // 版本号提交挂在这条流水线的最后一环（zip）之后：
+            // 编译失败、copy 失败、zip 失败时都不会写号，只有整条链路跑通才提交。
+            rootProject.tasks.named(zipTaskName).configure {
+                finalizedBy(if (buildType == "release") ":commitVersionRelease" else ":commitVersionTest")
+            }
         }
     }
 }
@@ -170,17 +178,17 @@ subprojects {
 // 构建成功后才由 commitVersion* 把号写回 build.gradle.kts。
 // 构建失败/中断 → 文件没被改，天然不涨，不需要回退点。
 
-/** 构建结束：成功才提交版本号。 */
+/** 本构建里是否已有任何任务失败（编译、打包、copy、zip 都算）。 */
+fun anyTaskFailed(): Boolean =
+    rootProject.gradle.taskGraph.allTasks.any { it.state.failure != null }
+
+/** 构建真正跑完且没出错，才把本次算出的号写回文件。 */
 fun commitVersionIfSuccess(assembleSuffix: String, label: String) {
-    // 必须收集**全部**匹配的 assemble 任务：
-    // 每个子项目的 tasks 里可能同时存在 assembleDebug 与 assembleStandardDebug，
-    // 原来用 firstOrNull 只取到第一个，常常取到没跑的那个，导致 anyExecuted 永远为 false。
     val assembles = rootProject.allprojects.flatMap { p ->
         p.tasks.toList().filter { it.name.startsWith("assemble") && it.name.endsWith(assembleSuffix) }
     }
-    val anyFailure = assembles.any { it.state.failure != null }
     val anyExecuted = assembles.any { it.state.executed }
-    if (!anyFailure && anyExecuted) {
+    if (!anyTaskFailed() && anyExecuted) {
         val pendingCode = rootProject.extra["pendingVersionCode"] as? Int
         val pendingRel = rootProject.extra["pendingReleaseName"] as? String
         val pendingPatch = rootProject.extra["pendingTestPatch"] as? Int
@@ -191,7 +199,7 @@ fun commitVersionIfSuccess(assembleSuffix: String, label: String) {
             println("$label 构建成功，本次没有版本号变更")
         }
     } else {
-        println("$label 构建未成功，版本号未改动（下次构建不会跳号）")
+        println("$label 构建未成功（有任务失败），版本号未改动")
     }
 }
 
@@ -203,13 +211,6 @@ tasks.register("commitVersionRelease") {
     doLast { commitVersionIfSuccess("Release", "正式版") }
 }
 
-allprojects {
-    tasks.matching { it.name.startsWith("assemble") && it.name.endsWith("Debug") }
-        .configureEach {
-            finalizedBy(":commitVersionTest")
-        }
-    tasks.matching { it.name.startsWith("assemble") && it.name.endsWith("Release") }
-        .configureEach {
-            finalizedBy(":commitVersionRelease")
-        }
-}
+// 版本号提交统一走上面的 zip → commit 链路，这里不再给每个 assemble 任务挂 finalizedBy，
+// 否则编译失败/后续任务失败时也会误提交版本号。
+

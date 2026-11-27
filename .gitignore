@@ -39,3 +39,14 @@ docs/备份/
 !/docs/LSPosed上架-提交说明.md
 !/docs/图标-512.png
 !/docs/状态栏歌词控制面板-词岛卡片.md
+
+# 任意层级的其它 .md（如 xposed/README-包结构.md）也不入库，只放行上面几份
+*.md
+!/README.md
+!/.github/RELEASE_TEMPLATE.md
+!/docs/LSPosed上架-提交说明.md
+!/docs/状态栏歌词控制面板-词岛卡片.md
+
+# 源码改前的 .bak 备份只留本机，不进公开仓库
+*.bak
+*.bak_*
