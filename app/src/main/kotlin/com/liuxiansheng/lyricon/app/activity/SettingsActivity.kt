@@ -1,6 +1,6 @@
 /*
  * 词岛 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
- * 包名：com.liuxiansheng.chidao
+ * 包名：io.github.liuxiansheng12369.chidao
  * Copyright 2026 liuxiansheng（刘先生）
  * 本文件为 词岛 自研实现。
  */
@@ -1529,6 +1529,10 @@ internal fun AboutScreen(onBack: () -> Unit, onOpenSponsors: () -> Unit = {}) {
                             AboutItem("功能", "超级岛歌词 · 卡拉OK逐字 · 歌词源管理")
                         }
 
+                        Spacer(Modifier.height(6.dp))
+                        AboutUpdateSection(context = context, localVersionName = versionName)
+                        Spacer(Modifier.height(6.dp))
+
                         Spacer(Modifier.height(12.dp))
                         if (CouiUiState.enabled.value) com.liuxiansheng.lyricon.app.coui.CouiPageDivider()
                         else androidx.compose.material.Divider(color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.08f))
@@ -1863,6 +1867,117 @@ private fun AboutCredit(
             )
         }
     }
+}
+
+/** 关于页·检查更新（2.5.4）：数据源是 modules.lsposed.org 的模块 JSON，手动点 + 启动一天一次 */
+@Composable
+private fun AboutUpdateSection(context: Context, localVersionName: String) {
+    val state = com.liuxiansheng.lyricon.app.util.UpdateChecker.result
+    var checking by remember { mutableStateOf(false) }
+    var checkedOnce by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val accent = LocalHomeSkin.current?.accent ?: Color(0xFF4F7CFF)
+    val update = state.value
+    val lastCheck = com.liuxiansheng.lyricon.app.util.UpdateChecker.lastCheckTime(context)
+
+    val subtitle = when {
+        checking -> "正在查询模块仓库…"
+        update != null -> "有新版本 ${update.versionName}（当前 $localVersionName）"
+        checkedOnce || lastCheck > 0L -> "已是最新版本（$localVersionName）"
+        else -> "每天自动查一次，也可以现在手动查"
+    }
+
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "检查更新",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MiuixTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    subtitle,
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            SponsorButton(
+                label = if (checking) "查询中" else "检查",
+                accent = if (checking) accent.copy(alpha = 0.6f) else accent,
+            ) {
+                if (!checking) {
+                    checking = true
+                    scope.launch {
+                        val found = withContext(Dispatchers.IO) {
+                            runCatching {
+                                com.liuxiansheng.lyricon.app.util.UpdateChecker.check(context, force = true)
+                            }.getOrNull()
+                        }
+                        checking = false
+                        checkedOnce = true
+                        Toast.makeText(
+                            context,
+                            if (found != null) "发现新版本 ${found.versionName}" else "已是最新版本",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                }
+            }
+        }
+
+        val current = update
+        if (current != null) {
+            if (current.notes.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    current.notes,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                SponsorButton("下载 ${current.versionName}", accent) {
+                    val opened = openFirstAvailableUrl(
+                        context,
+                        current.downloadUrl,
+                        current.originalUrl,
+                        current.pageUrl,
+                    )
+                    if (!opened) Toast.makeText(context, "没找到能打开链接的应用", Toast.LENGTH_SHORT).show()
+                }
+                SponsorButton("打开仓库页", MiuixTheme.colorScheme.onSurface.copy(alpha = 0.75f)) {
+                    val opened = openFirstAvailableUrl(context, current.pageUrl, current.originalUrl)
+                    if (!opened) Toast.makeText(context, "没找到能打开链接的应用", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+}
+
+/** 依次尝试打开第一个可用链接（下载直链会过期，失败就落到下一个） */
+private fun openFirstAvailableUrl(context: Context, vararg urls: String): Boolean {
+    for (url in urls) {
+        if (url.isBlank()) continue
+        val ok = runCatching {
+            context.startActivity(
+                android.content.Intent(
+                    android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse(url),
+                ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+            true
+        }.getOrElse { false }
+        if (ok) return true
+    }
+    return false
 }
 
 /** 关于信息行：左标签 + 右值 */

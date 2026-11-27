@@ -1,6 +1,6 @@
 /*
  * 词岛 · YoYo 换句动画预设表（移植自上游 lyric:view 的 yoyo 包）
- * 包名：com.liuxiansheng.chidao
+ * 包名：io.github.liuxiansheng12369.chidao
  * Copyright 2026 liuxiansheng（刘先生）
  *
  * 上游 YoYoPresets 注册了 26 个预设，其中 "default" 与 "fade_out_left_fade_in_right"

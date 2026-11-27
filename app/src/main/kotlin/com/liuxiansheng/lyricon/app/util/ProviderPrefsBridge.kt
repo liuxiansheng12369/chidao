@@ -1,6 +1,6 @@
 /*
  * 词岛 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
- * 包名：com.liuxiansheng.chidao
+ * 包名：io.github.liuxiansheng12369.chidao
  * Copyright 2026 liuxiansheng（刘先生）
  *
  * ProviderPrefsBridge：B1 暂停防冻结配置的跨进程 prefs 桥。

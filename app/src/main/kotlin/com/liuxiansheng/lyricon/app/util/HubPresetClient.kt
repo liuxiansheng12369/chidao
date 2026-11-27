@@ -1,6 +1,6 @@
 /*
  * 词岛 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
- * 包名：com.liuxiansheng.chidao
+ * 包名：io.github.liuxiansheng12369.chidao
  * Copyright 2026 liuxiansheng（刘先生）
  *
  * HyperIsland-Hub 配置共享中心客户端（词岛版，对齐上游 HubClient）：

@@ -1,6 +1,6 @@
 /*
  * 词岛 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
- * 包名：com.liuxiansheng.chidao
+ * 包名：io.github.liuxiansheng12369.chidao
  * Copyright 2026 liuxiansheng（刘先生）
  * 本文件为 词岛 自研实现。
  */
@@ -15,7 +15,7 @@ import com.liuxiansheng.lyricon.bridge.BridgeSender
 /**
  * B1 暂停防冻结：本地 prefs 桥。
  * B1 配置强制写本地 SharedPreferences 文件
- * `com.liuxiansheng.lyricon_preferences.xml`（/data/user/0/com.liuxiansheng.chidao/shared_prefs/），
+ * `com.liuxiansheng.lyricon_preferences.xml`（/data/user/0/io.github.liuxiansheng12369.chidao/shared_prefs/），
  * Pro 端（跑在音乐 App 进程）用 su 读同一文件生效。
  * 不走 Xposed 远程 prefs —— remote 数据落不到本地文件，provider 用 su 读不到。
  */

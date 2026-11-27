@@ -1,6 +1,6 @@
 /*
  * 词岛 · COUI 凝光视效测试分支（独立于正式版）
- * 包名：com.liuxiansheng.chidao.couitest
+ * 包名：io.github.liuxiansheng12369.chidao.couitest
  *
  * 这一页是用 COUI-Kit（ColorOS 17 凝光视效组件库）原生组件搭的设置页。
  * 与 Miuix 版设置页共用同一份 MasterPrefs 配置，只换外观，不动任何业务逻辑。

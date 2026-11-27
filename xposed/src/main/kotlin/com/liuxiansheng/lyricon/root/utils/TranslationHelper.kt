@@ -1,6 +1,6 @@
 /*
  * 词岛 · 翻译显示策略
- * 包名：com.liuxiansheng.chidao
+ * 包名：io.github.liuxiansheng12369.chidao
  * Copyright 2026 liuxiansheng（刘先生）
  * 本文件为 词岛 自研实现。
  */

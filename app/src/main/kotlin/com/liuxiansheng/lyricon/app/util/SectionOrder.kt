@@ -1,6 +1,6 @@
 /*
  * 词岛 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
- * 包名：com.liuxiansheng.chidao
+ * 包名：io.github.liuxiansheng12369.chidao
  * Copyright 2026 liuxiansheng（刘先生）
  *
  * 分组排序持久化：主页区块 / 设置页分组 的长按排序顺序（纯 UI 顺序，xposed 端不读）。

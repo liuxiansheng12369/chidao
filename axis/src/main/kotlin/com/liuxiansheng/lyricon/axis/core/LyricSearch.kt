@@ -1,6 +1,6 @@
 /*
  * 词岛 · 超级岛歌词（小米澎湃 OS / HyperOS）
- * 包名：com.liuxiansheng.chidao
+ * 包名：io.github.liuxiansheng12369.chidao
  * 模块：打轴器 :axis · 逐字打轴
  * Copyright 2026 liuxiansheng（刘先生）· 保留所有权利
  * 本文件为 词岛 自研实现，未经授权禁止复制、修改、分发。
@@ -81,7 +81,7 @@ object LyricSearch {
     /** 30 分钟内同一命中键不重复请求。 */
     private const val CACHE_TTL_MS = 30 * 60 * 1000L
 
-    private const val UA = "Lyricon/1.4.5 (Android; com.liuxiansheng.chidao)"
+    private const val UA = "Lyricon/1.4.5 (Android; io.github.liuxiansheng12369.chidao)"
 
     private val primarySources: List<LyricSource> = listOf(NeteaseSource, QQSource)
     private val wordSyncSource: LyricSource = LrclibSource

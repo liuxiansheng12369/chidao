@@ -46,7 +46,7 @@ object ShellUtils {
      * 返回 null 表示 su 不可用/文件不存在/解析失败（调用方静默回退）。
      */
     suspend fun readAppConfigPrefsFile(): Map<String, Any?>? {
-        val script = "cat /data/user/0/com.liuxiansheng.chidao/shared_prefs/com.liuxiansheng.lyricon_preferences.xml"
+        val script = "cat /data/user/0/io.github.liuxiansheng12369.chidao/shared_prefs/com.liuxiansheng.lyricon_preferences.xml"
         val result = execRootScript("nsenter --mount=/proc/1/ns/mnt -- sh", script)
             ?: return null
         if (!result.isSuccess) return null

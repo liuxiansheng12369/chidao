@@ -1,6 +1,6 @@
 /*
  * 词岛 · 逐字同步渲染器（自研重写版）
- * 包名：com.liuxiansheng.chidao
+ * 包名：io.github.liuxiansheng12369.chidao
  * Copyright 2026 liuxiansheng（刘先生）
  * 数据模型沿用 lyricon 系（LyricWord / RichLyricLine），绘制算法为本项目自有。
  *

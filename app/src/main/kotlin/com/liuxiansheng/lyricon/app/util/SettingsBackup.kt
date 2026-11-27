@@ -1,6 +1,6 @@
 /*
  * 词岛 · 设置备份 / 恢复（settings backup & restore）
- * 包名：com.liuxiansheng.chidao
+ * 包名：io.github.liuxiansheng12369.chidao
  * Copyright 2026 liuxiansheng（刘先生）
  *
  * 1.0.3：原先「导出设置 / 导入设置」只是两个空壳入口（onClick 里是 TODO），

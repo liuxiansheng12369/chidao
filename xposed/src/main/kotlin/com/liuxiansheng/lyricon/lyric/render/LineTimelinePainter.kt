@@ -1,6 +1,6 @@
 /*
  * 词岛 · 整行时间轴渲染器（自研重写版）
- * 包名：com.liuxiansheng.chidao
+ * 包名：io.github.liuxiansheng12369.chidao
  * Copyright 2026 liuxiansheng（刘先生）
  *
  * 无逐字词、按整行 begin/end 做时间轴的纯文本行使用。

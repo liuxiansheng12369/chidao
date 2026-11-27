@@ -1,6 +1,6 @@
 /*
  * 词岛 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
- * 包名：com.liuxiansheng.chidao
+ * 包名：io.github.liuxiansheng12369.chidao
  * Copyright 2026 liuxiansheng（刘先生）
  * 本文件为 词岛 自研实现。
  *
@@ -2899,7 +2899,7 @@ private fun BoardProgress(
         val ms = (f * total).toLong().coerceIn(0L, total)
         runCatching {
             context.sendBroadcast(
-                Intent("com.liuxiansheng.chidao.AXIS_MEDIA").apply {
+                Intent("io.github.liuxiansheng12369.chidao.AXIS_MEDIA").apply {
                     setPackage("com.android.systemui")
                     putExtra("cmd", "seek_to")
                     putExtra("arg", ms)

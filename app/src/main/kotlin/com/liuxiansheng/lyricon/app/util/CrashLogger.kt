@@ -4,8 +4,8 @@
  * 目的：调试联调时只能靠 logcat 抓崩溃，而 SystemUI 进程崩溃 / App 被系统杀掉后
  * logcat 也就没了。这里把未捕获异常整份写到 App 私有目录，事后直接读取即可。
  *
- * 落点：/data/data/com.liuxiansheng.chidao/files/crash/crash-<时间>.txt
- *       （用 `adb shell run-as com.liuxiansheng.chidao ls files/crash` 直接看）
+ * 落点：/data/data/io.github.liuxiansheng12369.chidao/files/crash/crash-<时间>.txt
+ *       （用 `adb shell run-as io.github.liuxiansheng12369.chidao ls files/crash` 直接看）
  *
  * 只作用于本 App 进程；SystemUI 进程（xposed 模块）不装全局处理器，
  * 避免改变系统进程原有的崩溃行为。

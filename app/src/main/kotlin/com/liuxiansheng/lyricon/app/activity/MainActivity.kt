@@ -1,6 +1,6 @@
 /*
  * 词岛 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
- * 包名：com.liuxiansheng.chidao
+ * 包名：io.github.liuxiansheng12369.chidao
  * Copyright 2026 liuxiansheng（刘先生）
  * 本文件为 词岛 自研实现。
  *
@@ -344,7 +344,7 @@ private fun AxisHomeScreen(onBack: () -> Unit) {
             onControl = { cmd, arg ->
                 runCatching {
                     context.sendBroadcast(
-                        Intent("com.liuxiansheng.chidao.AXIS_MEDIA").apply {
+                        Intent("io.github.liuxiansheng12369.chidao.AXIS_MEDIA").apply {
                             setPackage("com.android.systemui")
                             putExtra("cmd", cmd)
                             putExtra("arg", arg)
@@ -532,6 +532,32 @@ private fun HomeScreen(
                         Color.White.copy(alpha = 0.14f)
                     } else {
                         Color.White.copy(alpha = 0.80f)
+                    }
+                    // 有新版本时在右上角挂一枚提示，点开就是关于页（自动检查一天一次，失败不显示）
+                    com.liuxiansheng.lyricon.app.util.UpdateChecker.result.value?.let { upd ->
+                        Box(
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .background(
+                                    (skin?.accent ?: Color(0xFF4F7CFF)).copy(alpha = 0.18f),
+                                    RoundedCornerShape(14.dp)
+                                )
+                                .border(
+                                    1.dp,
+                                    (skin?.accent ?: Color(0xFF4F7CFF)).copy(alpha = 0.45f),
+                                    RoundedCornerShape(14.dp)
+                                )
+                                .clickable { onOpenAbout() }
+                                .padding(horizontal = 14.dp, vertical = 9.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "有新版本 ${upd.versionName}",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = skin?.accent ?: Color(0xFF4F7CFF),
+                            )
+                        }
                     }
                     Box(
                         modifier = Modifier

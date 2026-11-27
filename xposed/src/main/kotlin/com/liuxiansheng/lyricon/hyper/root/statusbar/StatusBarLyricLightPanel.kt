@@ -62,8 +62,8 @@ internal object StatusBarLyricLightPanel {
     private const val CARD_BG = 0xFFF2F6FF.toInt()
 
     /** 词岛包名：广播钉住它，避免被别的应用收到 */
-    private const val APP_PACKAGE = "com.liuxiansheng.chidao"
-    private const val ACTION_QUICK_SET = "com.liuxiansheng.chidao.STATUS_BAR_QUICK_SET"
+    private const val APP_PACKAGE = "io.github.liuxiansheng12369.chidao"
+    private const val ACTION_QUICK_SET = "io.github.liuxiansheng12369.chidao.STATUS_BAR_QUICK_SET"
 
     private const val KEY_CONTENT_MODE = "key_hook_status_bar_lyric_content_mode"
     private const val KEY_TEXT_SIZE = "key_hook_status_bar_lyric_text_size"

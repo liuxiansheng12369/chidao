@@ -19,8 +19,8 @@ internal object IslandBackgroundFile {
         File("/storage/emulated/0/Android/data/io.github.hyperisland/files"),
         File("/sdcard/Pictures/Lyricon"),
         File("/storage/emulated/0/Pictures/Lyricon"),
-        File("/sdcard/Android/data/com.liuxiansheng.chidao/files"),
-        File("/storage/emulated/0/Android/data/com.liuxiansheng.chidao/files"),
+        File("/sdcard/Android/data/io.github.liuxiansheng12369.chidao/files"),
+        File("/storage/emulated/0/Android/data/io.github.liuxiansheng12369.chidao/files"),
     )
 
     fun resolve(path: String): File? {

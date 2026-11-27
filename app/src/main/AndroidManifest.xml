@@ -128,7 +128,7 @@
             android:name=".util.StatusBarQuickSetReceiver"
             android:exported="true">
             <intent-filter>
-                <action android:name="com.liuxiansheng.chidao.STATUS_BAR_QUICK_SET" />
+                <action android:name="io.github.liuxiansheng12369.chidao.STATUS_BAR_QUICK_SET" />
             </intent-filter>
         </receiver>
 

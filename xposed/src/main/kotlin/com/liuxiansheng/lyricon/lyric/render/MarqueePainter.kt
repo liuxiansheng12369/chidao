@@ -1,6 +1,6 @@
 /*
  * 词岛 · 无缝跑马灯渲染器（自研重写版）
- * 包名：com.liuxiansheng.chidao
+ * 包名：io.github.liuxiansheng12369.chidao
  * Copyright 2026 liuxiansheng（刘先生）
  *
  * 文本超宽无逐字时使用。幽灵循环：行宽 + 幽灵间距为一周期，

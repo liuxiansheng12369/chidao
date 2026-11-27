@@ -1,6 +1,6 @@
 /*
  * 词岛 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
- * 包名：com.liuxiansheng.chidao
+ * 包名：io.github.liuxiansheng12369.chidao
  * Copyright 2026 liuxiansheng（刘先生）
  * 本文件为 词岛 自研实现。
  */
@@ -28,7 +28,7 @@ import com.liuxiansheng.lyricon.xposed.systemui.util.CurrentMediaInfo
 object AxisMediaControl {
 
     private const val TAG = "AxisMediaControl"
-    private const val ACTION = "com.liuxiansheng.chidao.AXIS_MEDIA"
+    private const val ACTION = "io.github.liuxiansheng12369.chidao.AXIS_MEDIA"
 
     private var receiver: BroadcastReceiver? = null
 

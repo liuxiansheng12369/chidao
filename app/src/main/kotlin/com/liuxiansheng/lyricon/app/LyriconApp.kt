@@ -42,6 +42,15 @@ class LyriconApp : Application() {
             }.start()
         }
 
+        // 检查更新：一天一次，后台线程，失败静默；结果挂在 UpdateChecker.result 上给首页/关于页读
+        runCatching {
+            if (com.liuxiansheng.lyricon.app.util.UpdateChecker.shouldAutoCheck(this)) {
+                Thread {
+                    runCatching { com.liuxiansheng.lyricon.app.util.UpdateChecker.check(this@LyriconApp, force = false) }
+                }.apply { isDaemon = true }.start()
+            }
+        }
+
         // 绑定 XposedService：设置页写入的开关通过 remote prefs 同步给 SystemUI 进程
         XposedServiceHelper.registerListener(object : XposedServiceHelper.OnServiceListener {
             override fun onServiceBind(service: XposedService) {

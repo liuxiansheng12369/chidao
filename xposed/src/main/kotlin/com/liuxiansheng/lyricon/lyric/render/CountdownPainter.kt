@@ -1,6 +1,6 @@
 /*
  * 词岛 · 倒计时渲染器（自研重写版）
- * 包名：com.liuxiansheng.chidao
+ * 包名：io.github.liuxiansheng12369.chidao
  * Copyright 2026 liuxiansheng（刘先生）
  *
  * 占位倒计时行：显示 mm:ss.d，剩余过半白色、不足半黄色。

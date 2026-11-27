@@ -1,6 +1,6 @@
 /*
  * 词岛 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
- * 包名：com.liuxiansheng.chidao
+ * 包名：io.github.liuxiansheng12369.chidao
  * Copyright 2026 liuxiansheng（刘先生）
  *
  * SkinTheme：二级页（听歌记录 / 歌词源 / 更多设置 / 关于 / 状态栏歌词…）统一继承首页主题皮肤。

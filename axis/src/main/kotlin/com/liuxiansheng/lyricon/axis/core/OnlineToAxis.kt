@@ -1,6 +1,6 @@
 /*
  * 词岛 · 超级岛歌词（小米澎湃 OS / HyperOS）
- * 包名：com.liuxiansheng.chidao
+ * 包名：io.github.liuxiansheng12369.chidao
  * 模块：打轴器 :axis · 在线词 → 轴
  * Copyright 2026 liuxiansheng（刘先生）· 保留所有权利
  * 本文件为 词岛 自研实现，未经授权禁止复制、修改、分发。

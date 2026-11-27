@@ -47,7 +47,7 @@ class StatusBarQuickSetReceiver : BroadcastReceiver() {
 
     companion object {
         /** SystemUI 面板 → App 的写设置动作 */
-        const val ACTION_QUICK_SET = "com.liuxiansheng.chidao.STATUS_BAR_QUICK_SET"
+        const val ACTION_QUICK_SET = "io.github.liuxiansheng12369.chidao.STATUS_BAR_QUICK_SET"
 
         const val EXTRA_KEY = "key"
         const val EXTRA_TYPE = "type"

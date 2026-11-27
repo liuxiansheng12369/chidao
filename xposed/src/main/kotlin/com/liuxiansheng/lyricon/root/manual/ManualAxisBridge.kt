@@ -1,6 +1,6 @@
 /*
  * 词岛 · 超级岛歌词 Xposed 模块（小米澎湃 OS / HyperOS）
- * 包名：com.liuxiansheng.chidao
+ * 包名：io.github.liuxiansheng12369.chidao
  * Copyright 2026 liuxiansheng（刘先生）
  * 本文件为 词岛 自研实现。
  */
@@ -145,7 +145,7 @@ object ManualAxisBridge {
                 runCatching {
                     context.sendBroadcast(
                         android.content.Intent(ManualAxisApi.ACTION_AXIS_SYNC_REQUEST)
-                            .setPackage("com.liuxiansheng.chidao")
+                            .setPackage("io.github.liuxiansheng12369.chidao")
                     )
                     DiagnosticsLog.i(TAG, "副本为空，已请 App 重推轴库")
                 }.onFailure { e ->
