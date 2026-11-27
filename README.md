@@ -3,7 +3,7 @@
 HyperOS 上的超级岛歌词 + 状态栏歌词模块。基于 LSPosed（libxposed API）注入 SystemUI，把正在播放的歌词写进小米超级岛，或者铺在状态栏上滚动；不修改系统分区，不做常驻前台服务。
 
 - 作者：liuxiansheng（刘先生）
-- 包名：`com.liuxiansheng.chidao`
+- 包名：`io.github.liuxiansheng12369.chidao`（2.5.3 起；旧的 `com.liuxiansheng.chidao` 不再发布）
 - 许可：GPL-3.0（上游组件另有协议，见 `THIRD-PARTY-NOTICES.md`）
 
 ## 功能
