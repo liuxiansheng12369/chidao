@@ -20,9 +20,9 @@ val releaseNameRe = """extra\["appReleaseVersionName"\] = "(\d+)\.(\d+)\.(\d+)""
 val testPatchRe = """extra\["appTestPatch"\] = (\d+)""".toRegex()
 
 // ↓ 下面是版本号存档（打包脚本自己改写它们），不是本次构建生效值，别手改
-extra["appVersionCode"] = 2872
-extra["appReleaseVersionName"] = "2.4.0"
-extra["appTestPatch"] = 3
+extra["appVersionCode"] = 2873
+extra["appReleaseVersionName"] = "2.5.0"
+extra["appTestPatch"] = 0
 
 fun writeVersionToFile(code: Int, release: String, testPatch: Int) {
     var t = selfVersionFile.readText()
